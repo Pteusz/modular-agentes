@@ -1,6 +1,6 @@
 # Estado
 VPS: vps2 (194.163.134.245), usuario pteuz. Projeto: /opt/modular-agentes. Ferramentas em .tools/ (fora do git); `source env.sh`.
-Etapa atual: 1 construida, aguardando aprovacao (branch etapa-1). Proxima: etapa 2 (contrato de automacao, PARADA).
+Etapa atual: 2 construida, aguardando aprovacao do contrato (branch etapa-2; etapa 1 aprovada e na main). Proxima: etapa 3.
 
 ## Portas
 Faixa reservada: 4100-4119 (livre em 2026-10-16). Em uso na VPS: 22 53 80 81 443 631 5432 5499.
@@ -22,5 +22,9 @@ Ver docs/modelo.txt. Estabilidade de varios dias: verificar na etapa 1 (sem bloq
 App unico (mix.exs na raiz, sem umbrella/Oban ainda), Postgrex 0.22.4 + Jason 1.4.5 + Amarula 0.5.10 fixados com ==. lib/nucleo/: registro (estado so-insert versionado, eventos, vinculos), vincular (idempotente, evento), manifesto, canal (behaviour) + simulado + amarula, laco (1 processo/tenant), gancho. Teto de envio: config teto_por_min (padrao 10); respostas com prefixo "[agente] ".
 Teste: `set -a; source /opt/modular-agentes-data/db.env; set +a; MIX_ENV=test mix test` (test/etapa1_test.exs; deixa tenants ta*/tb* no banco). Demo real: scripts/pareia.sh (QR) com tenant mateus (Amarula) + sim (simulado). Sessao Amarula em /opt/modular-agentes-data/amarula/mateus (re-pareada em 2026-10-16).
 Gancho esqueleto so registra/bloqueia por config. Estabilidade de varios dias: nao medida ainda.
+## Etapa 2 (contrato de automacao) - pronta p/ aprovacao
+lib/nucleo/automacao.ex: behaviour Nucleo.Automacao (versao/0 do codigo; contrato/0 = %{versao MAJOR.MINOR, oferece, exige}; referencial/0; retencao/0; aprovacao/0). Nucleo fornece "registro","gancho","canal.texto" 1.0; a camada do cliente fornece o resto (mapa cap=>versao).
+Decisoes (Mateus): compativel se MAJOR do contrato = MAJOR do nucleo (1) e, por exigencia, MAJOR igual e MINOR fornecido >= exigido; encaixe declarado, checado so em Vincular.vincular/4 (modulo, canal, camada) ANTES de gravar; recusa = evento vinculo_recusado + {:error,{:incompativel,motivos}}, vinculo anterior intacto. Verificador: so :decidivel (outros recusados). Vincular segue funcao chamada pelo Mateus.
+Teste: test/etapa2_test.exs (mix test roda etapas 1 e 2; etapa 0 por `elixir test/etapa0_test.exs`).
 ## Proximo passo
-Aprovar etapa 1 (merge) e definir o contrato de automacao (etapa 2).
+Aprovar contrato (merge etapa-1 e etapa-2) e iniciar etapa 3 (automacao de teste, verificador decidivel).
