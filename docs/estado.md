@@ -27,4 +27,4 @@ lib/nucleo/automacao.ex: behaviour Nucleo.Automacao (versao/0 do codigo; contrat
 Decisoes (Mateus): compativel se MAJOR do contrato = MAJOR do nucleo (1) e, por exigencia, MAJOR igual e MINOR fornecido >= exigido; encaixe declarado, checado so em Vincular.vincular/4 (modulo, canal, camada) ANTES de gravar; recusa = evento vinculo_recusado + {:error,{:incompativel,motivos}}, vinculo anterior intacto. Verificador: so :decidivel (outros recusados). Vincular segue funcao chamada pelo Mateus.
 Teste: test/etapa2_test.exs (mix test roda etapas 1 e 2; etapa 0 por `elixir test/etapa0_test.exs`).
 ## Proximo passo
-Aprovar contrato (merge etapa-1 e etapa-2) e iniciar etapa 3 (automacao de teste, verificador decidivel).
+Aprovar contrato (merge etapa-2) e iniciar etapa 3 (automacao de teste, verificador decidivel).
