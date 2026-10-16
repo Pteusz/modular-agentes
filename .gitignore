@@ -1,0 +1,12 @@
+.env
+.env.*
+*.session
+sessions/
+_build/
+deps/
+cover/
+*.ez
+erl_crash.dump
+node_modules/
+target/
+*.log

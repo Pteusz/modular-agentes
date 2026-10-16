@@ -1,0 +1,56 @@
+SISTEMA NUCLEO DE AGENTES MODULAR
+Estado do modelo em 2026-10-16. Cole este arquivo no inicio de outro chat para retomar.
+
+CRITERIOS (fonte, definidos por Mateus)
+C1: Todas as automacoes vivem em um unico lugar.
+C2: E possivel clonar o repositorio em outras VPS.
+C3: Sistema de agentes. Automacoes padrao: trafego pago, gerenciamento de redes sociais, site e demais automacoes que tiver no sistema.
+C4: Cada automacao e independente e se conecta com outras com base no que o cliente quiser.
+C5: E possivel criar automacoes fora da lista padrao do projeto, que funcionariam para outros clientes.
+C6: Toda automacao tem uma base generica e uma base especializada.
+C7: Multiusuario por construcao, sem gargalo em escala. Exemplo: trafego pago com agentes de IA, varios usuarios, cada um com suas contas de anuncio, gerenciando pelo WhatsApp conversando com o proprio numero, onde a IA faz o que ele pede.
+C8: As regras de negocio das automacoes com IA sao genericas; a demanda do projeto dita como a IA retem contexto, aprende etc.
+C9: O sistema e rapido e leve.
+C10: O sistema e simples, sem excesso de complexidade.
+C11: Cada instancia e versionavel: para atualizar uma instancia, puxa-se do GitHub a versao nova de uma automacao especifica, sem quebrar.
+C12: E possivel fazer chamadas cruzadas sem quebrar: dentro de uma instancia, obter dados da automacao X que sao iguais a parte Z de outra automacao.
+
+NUCLEO
+O sistema e um conjunto de partes que se diferenciam e retem umas sobre as outras. O nucleo e o projeto, e cada automacao criada devolve a ele a sua versao generica.
+
+INSTANCIAS
+1. CORRESPONDENCIAS: nenhum sistema existente cobre o conjunto; so cobrem pecas isoladas (plugins versionados por repositorio, multi-tenant, contratos entre modulos).
+2. TENSOES: (a) chamadas cruzadas x independencia; (b) isolamento de usuarios no mesmo servico x custo de processamento, simplicidade e versionamento. Isolar por infraestrutura custa processamento; isolar por dado cria complexidade.
+3. META LISTA: os criterios sao dados que ainda nao existem; o que nao encontra procedimento vira dado de correcao, e as duas tensoes sao esse dado.
+4. COLAPSO PELO LACO: diferenciar e reter nascem juntos; o vinculo nasce por encaixe de posicao; isolamento e ausencia de vinculo; a retencao so conta se alterar quem retem; a unidade de retencao e a regra violada, nao o caso.
+5. FORMA MINIMA: automacoes sao partes; independencia e uma quantidade; base generica = laco, base especializada = referencial (verificador + catalogo de regras); tenant e registro com posicao; chamada cruzada retem apenas o que aparece na fronteira da outra parte; versao nova e outra peca no mesmo encaixe.
+6. DESENHOS REAPROVEITAVEIS: atores virtuais (Orleans, Durable Objects), loop de reconciliacao (controllers do Kubernetes), contratos dirigidos pelo consumidor (Pact), interfaces de componentes (WebAssembly), lockfile e identidade por conteudo (Nix).
+7. NUCLEO GENERICO x DOMINIO: o nucleo tem registro (estado versionado, separado do codigo), vinculo e manifesto de versoes exatas, o laco e um gancho antes da acao. O dominio configura referencial, o que reter e como e lido de volta, quais acoes exigem aprovacao, e a oferta e a exigencia para vincular. Exemplo: confirmar gasto e configuracao do dominio trafego, nao do nucleo.
+8. OPERACAO DE VINCULAR: cria tenant, posicao e vinculo; idempotente; registrada como evento.
+9. DESENHO EM CAMADAS: instancia > nucleo (generico) > automacoes (dominio) > tenants (registros com numero e conta, mesmo codigo).
+10. CANAL: OpenClaw descartado. WhatsApp conectado por QR code, conversa em chat proprio, uma sessao por tenant, atras de um contrato minimo (enviar e receber texto). Rota nao oficial, com risco de banimento do numero.
+11. ORDEM DE CONSTRUCAO: (1) nucleo minimo; (2) contrato de automacao; (3) automacao de teste sem dominio, com verificador decidivel, que e o molde da primeira versao generica; (4) trafego como primeira automacao real; (5) redes sociais como teste de que o nucleo e generico. A primeira entrega e a base ate o ponto 3.
+12. DOIS REPOSITORIOS: o do projeto guarda o nucleo e a versao generica de cada automacao, cada uma com sua versao; o do cliente guarda a camada especializada e o manifesto que fixa as versoes. A instancia e o repositorio do cliente, e clonar em outra VPS e clonar esse repositorio.
+13. TECNOLOGIA (recomendacao, nao fechada): Elixir/OTP com Postgres e Oban; cada sessao de WhatsApp como processo supervisionado; contratos como behaviours. Alternativas: Go com whatsmeow, TypeScript com Baileys.
+
+GENERALIZACOES
+- Retencao so conta se alterar quem retem; registro externo nao fecha o laco.
+- A unidade de retencao e a regra violada, nao o caso.
+- Generico e o laco; especializado e o referencial.
+- Parte e registro com posicao, nao instancia por cliente.
+- Isolamento e ausencia de vinculo, nao regra de filtro.
+- Independencia e quantidade: o quanto a parte perde de liberdade ao se ligar.
+- O nucleo so conhece o contrato de automacao; todo o dominio e configuracao.
+- O nucleo e definido pelo contrato e testado pela automacao trivial, nao desenhado no abstrato.
+- Cada automacao criada acrescenta ao nucleo a sua versao generica.
+
+EM ABERTO
+- O que sobrevive a troca de versao de uma parte, ja que o aprendizado mora na parte trocada (candidato: estado separado do codigo, lido de volta pelo laco).
+- Quem dispara a operacao de vincular (voce ou o cliente em onboarding).
+- Criterio de encaixe e o que faz um vinculo persistir ou se desfazer (candidato: declarado, nunca inferido).
+- Tipo de verificador por regra: decidivel, empirico com atraso, humano.
+- Compatibilidade de contrato entre a automacao generica e a camada do cliente (versao do contrato separada da versao do codigo).
+- Linguagem: depende do teste do canal (cerca de 50 sessoes em BaileysEx ou Amarula, medindo memoria e estabilidade por dias; fallback Go com whatsmeow).
+- Se o Mix permite depender de so algumas automacoes de um monorepo (nao verificado).
+- Se o laco le de volta o estado e altera o comportamento: teste da automacao trivial.
+- Adiado ate uma automacao pedir: migracoes de schema, faixas de compatibilidade, credenciais cifradas em armazenamento separado, fila de pendencias.
