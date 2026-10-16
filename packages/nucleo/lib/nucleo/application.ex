@@ -9,7 +9,7 @@ defmodule Nucleo.Application do
     ]
 
     {:ok, sup} = Supervisor.start_link(children, strategy: :one_for_one, name: Nucleo.Sup)
-    Task.start(fn -> try do Nucleo.Inicializacao.validar_todos() rescue e -> require Logger; Logger.warning("inicializacao nao validou: " <> Exception.message(e)) end end)
+    Task.start(fn -> try do Nucleo.Registro.migrar!(); Nucleo.Inicializacao.validar_todos() rescue e -> require Logger; Logger.warning("inicializacao nao validou: " <> Exception.message(e)) end end)
     {:ok, sup}
   end
 end
