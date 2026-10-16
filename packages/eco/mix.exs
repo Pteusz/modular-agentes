@@ -6,7 +6,7 @@ defmodule PEco.MixProject do
   defp nucleo do
     if System.get_env("NUCLEO_LOCAL"),
       do: {:nucleo, path: "../nucleo"},
-      else: {:nucleo, git: System.get_env("NUCLEO_GIT", "https://github.com/Pteusz/modular-agentes.git"), sparse: "packages/nucleo", tag: "nucleo-1.0.0"}
+      else: {:nucleo, git: System.get_env("NUCLEO_GIT", "https://github.com/Pteusz/modular-agentes.git"), sparse: "packages/nucleo", tag: System.get_env("NUCLEO_TAG", "nucleo-1.0.0")}
   end
 
   def project, do: [app: :eco, version: @version, elixir: "~> 1.19", deps: [nucleo()]]

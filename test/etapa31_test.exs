@@ -119,7 +119,8 @@ defmodule Etapa31Test do
     antes = {Registro.vinculos(), Manifesto.gerar(), Registro.ler(t, "contagem"), Registro.eventos(t)}
 
     # 2.0 quebra B (exige eco 1): recusa inteira, evento com o vinculo que quebraria
-    assert {:error, {:incompativel, [q]}} = Vincular.atualizar(eco, EcoV20, %{})
+    assert {:error, {:incompativel, qs}} = Vincular.atualizar(eco, EcoV20, %{})
+    assert [q] = Enum.filter(qs, &(&1.tenant == t))
     assert q.tenant == t and q.automacao == inspect(B) and hd(q.motivos) =~ "eco"
     ev = Registro.eventos(t) |> Enum.filter(&(&1.tipo == "atualizacao_recusada"))
     assert [%{dados: %{"automacao" => ^eco, "versao" => "2.0.0", "vinculo" => %{"tenant" => ^t, "automacao" => b}}}] = ev
@@ -132,5 +133,79 @@ defmodule Etapa31Test do
     assert c == %{"n" => 7}
     assert Enum.map(Registro.eventos(t) -- evs, & &1.tipo) == ["atualizacao_recusada"]
     assert %{versao: "1.1.0"} = Registro.vinculo(t, eco)
+  end
+
+  # automacao de teste cujo codigo carregado exige uma versao do Eco configuravel (simula "versao carregada diferente")
+  defmodule BNovo do
+    @behaviour Nucleo.Automacao
+    def versao, do: "1.1.0"
+    def contrato,
+      do: %{versao: "1.0", oferece: %{}, exige: %{"registro" => "1.0", "eco" => Application.get_env(:nucleo, :exige_eco_teste, "2.0")}}
+    def referencial, do: %{tipo: :decidivel, regras: [:r1]}
+    def retencao, do: []
+    def aprovacao, do: []
+  end
+
+  defp espera(fun), do: espera(fun, 100)
+  defp espera(fun, n) do
+    cond do
+      fun.() -> true
+      n == 0 -> false
+      true -> Process.sleep(20); espera(fun, n - 1)
+    end
+  end
+
+  defp estado(t, a), do: Registro.contratos(t) |> Enum.find(&(&1.automacao == a)) |> Map.get(:estado)
+  defp tipos(t), do: Registro.eventos(t) |> Enum.map(& &1.tipo)
+
+  test "parte B.2: inicializacao com versao carregada incompativel desativa so aquele vinculo; compativel atualiza; volta sozinho" do
+    sfx = System.unique_integer([:positive])
+    {t1, t2, t3} = {"ta31i_#{sfx}", "tb31i_#{sfx}", "tb31j_#{sfx}"}
+    eco = "Nucleo.Automacoes.Eco"
+    bn = inspect(BNovo)
+    sim = inspect(Canal.Simulado)
+    Application.put_env(:nucleo, :exige_eco_teste, "2.0")
+    on_exit(fn -> Application.delete_env(:nucleo, :exige_eco_teste) end)
+
+    # contrato antigo registrado (compativel); o codigo carregado agora exige eco 2.0
+    antigo = %{versao: "1.0", oferece: %{}, exige: %{"registro" => "1.0", "eco" => "1.0"}}
+    for t <- [t1, t2, t3], do: Registro.criar_tenant(t)
+    for t <- [t1, t2], do: {:ok, :criado} = Vincular.vincular(t, Eco, Canal.Simulado, %{})
+    Registro.gravar_vinculo(t1, bn, "0.9.0", sim, antigo)
+    Registro.gravar_vinculo(t3, bn, "0.9.0", sim, antigo)
+    {:ok, :criado} = Vincular.vincular(t2, B, Canal.Simulado, %{})
+    # t2: vinculo sem contrato (como o do tenant mateus) e outro com versao de codigo defasada
+    Postgrex.query!(Registro, "UPDATE vinculos SET contrato=NULL, versao='0.9.0' WHERE tenant_id=$1 AND automacao=$2", [t2, eco])
+    Postgrex.query!(Registro, "UPDATE vinculos SET versao='0.5.0' WHERE tenant_id=$1 AND automacao=$2", [t2, inspect(B)])
+
+    assert :ok = Nucleo.Inicializacao.validar_todos()
+
+    # incompativel: inativo so naquele tenant/automacao, com evento; a Eco do mesmo tenant segue ativa
+    assert estado(t1, bn) == "inativo_incompativel"
+    assert estado(t1, eco) == "ativo"
+    assert estado(t3, bn) == "inativo_incompativel"
+    assert "inativo_incompativel" in tipos(t1)
+    assert {t1, bn} in Registro.inativos()
+
+    # outro tenant segue: sem contrato recebe o carregado; versao defasada com contrato compativel so atualiza a versao
+    assert estado(t2, eco) == "ativo" and estado(t2, inspect(B)) == "ativo"
+    assert "contrato_registrado" in tipos(t2) and "versao_registrada_atualizada" in tipos(t2)
+    assert %{versao: "1.0.0"} = Registro.vinculo(t2, inspect(B))
+    assert Enum.find(Registro.contratos(t2), &(&1.automacao == eco)).contrato["oferece"] == %{"eco" => "1.0"}
+
+    # a automacao inativa nao roda para o tenant (t3); o tenant t2 segue respondendo
+    {:ok, l3} = Nucleo.Laco.iniciar(t3)
+    Canal.Simulado.injetar(Nucleo.Laco.canal(l3), :proprio, "oi")
+    Process.sleep(200)
+    assert Canal.Simulado.enviadas(Nucleo.Laco.canal(l3)) == []
+    {:ok, l2} = Nucleo.Laco.iniciar(t2)
+    Canal.Simulado.injetar(Nucleo.Laco.canal(l2), :proprio, "oi")
+    assert espera(fn -> Canal.Simulado.enviadas(Nucleo.Laco.canal(l2)) == ["[agente] eco #1: oi"] end)
+
+    # na proxima inicializacao volta a ser compativel: reativa sozinho, sem apagar dados
+    Application.put_env(:nucleo, :exige_eco_teste, "1.0")
+    Nucleo.Inicializacao.validar_todos()
+    assert estado(t1, bn) == "ativo" and "vinculo_reativado" in tipos(t1)
+    assert %{versao: "1.1.0"} = Registro.vinculo(t1, bn)
   end
 end

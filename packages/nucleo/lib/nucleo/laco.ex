@@ -20,18 +20,25 @@ defmodule Nucleo.Laco do
 
   @impl GenServer
   def init({tenant, opts}) do
+    Nucleo.Inicializacao.validar(tenant)
     mod = opts[:canal] || canal_vinculado(tenant)
     {:ok, ref} = mod.iniciar(tenant, self(), opts[:canal_opts] || [])
     {:ok, %{tenant: tenant, mod: mod, ref: ref, auto: automacao(tenant)}}
   end
 
-  # automacao vinculada que implementa Nucleo.Passo; sem ela vale o esqueleto (contador)
+  # automacao ATIVA vinculada que implementa Nucleo.Passo; sem ela vale o esqueleto (contador).
+  # Se so ha vinculo inativo_incompativel, a automacao nao roda para este tenant (:inativo).
   defp automacao(tenant) do
-    for %{tenant: ^tenant, automacao: a} <- Registro.vinculos(),
-        mod = Module.concat([a]),
-        Code.ensure_loaded?(mod) and function_exported?(mod, :passo, 2),
-        reduce: nil,
-        do: (_ -> mod)
+    linhas = Registro.contratos(tenant)
+
+    ativa =
+      for %{automacao: a, estado: "ativo"} <- linhas,
+          mod = Module.concat([a]),
+          Code.ensure_loaded?(mod) and function_exported?(mod, :passo, 2),
+          reduce: nil,
+          do: (_ -> mod)
+
+    if ativa == nil and Enum.any?(linhas, &(&1.estado == "inativo_incompativel")), do: :inativo, else: ativa
   end
 
   defp canal_vinculado(tenant) do
@@ -43,6 +50,8 @@ defmodule Nucleo.Laco do
   def handle_call(:canal, _, s), do: {:reply, s.ref, s}
 
   @impl GenServer
+  def handle_info({:mensagem, _}, %{auto: :inativo} = s), do: {:noreply, s}
+
   def handle_info({:mensagem, texto}, %{auto: auto} = s) when auto != nil do
     retido = for %{chave: k, leitura: l} <- auto.retencao(), into: %{}, do: {k, ler(s.tenant, k, l)}
     r = auto.passo(texto, retido)

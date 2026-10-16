@@ -8,6 +8,8 @@ defmodule Nucleo.Application do
       {DynamicSupervisor, name: Nucleo.Lacos, strategy: :one_for_one}
     ]
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: Nucleo.Sup)
+    {:ok, sup} = Supervisor.start_link(children, strategy: :one_for_one, name: Nucleo.Sup)
+    Task.start(fn -> try do Nucleo.Inicializacao.validar_todos() rescue e -> require Logger; Logger.warning("inicializacao nao validou: " <> Exception.message(e)) end end)
+    {:ok, sup}
   end
 end

@@ -33,6 +33,7 @@ defmodule Nucleo.Registro do
         do: q(sql)
 
     q("ALTER TABLE vinculos ADD COLUMN IF NOT EXISTS contrato jsonb")
+    q("ALTER TABLE vinculos ADD COLUMN IF NOT EXISTS estado text NOT NULL DEFAULT 'ativo'")
     :ok
   end
 
@@ -121,11 +122,19 @@ defmodule Nucleo.Registro do
     :ok
   end
 
-  @doc "Contratos registrados dos vinculos do tenant: [%{automacao, contrato}] (contrato nil se vinculado so por versao)."
+  @doc "Vinculos do tenant com versao, canal, contrato registrado (nil se vinculado so por versao) e estado (ativo | inativo_incompativel)."
   def contratos(tenant) do
-    q("SELECT automacao, contrato FROM vinculos WHERE tenant_id=$1 ORDER BY 1", [tenant]).rows
-    |> Enum.map(fn [a, c] -> %{automacao: a, contrato: c} end)
+    q("SELECT automacao, versao, canal, contrato, estado FROM vinculos WHERE tenant_id=$1 ORDER BY 1", [tenant]).rows
+    |> Enum.map(fn [a, v, ca, c, e] -> %{automacao: a, versao: v, canal: ca, contrato: c, estado: e} end)
   end
+
+  def marcar_estado(tenant, automacao, estado),
+    do: q("UPDATE vinculos SET estado=$3 WHERE tenant_id=$1 AND automacao=$2", [tenant, automacao, estado]) && :ok
+
+  def tenants_vinculados, do: q("SELECT DISTINCT tenant_id FROM vinculos ORDER BY 1").rows |> List.flatten()
+
+  def inativos,
+    do: q("SELECT tenant_id, automacao FROM vinculos WHERE estado <> 'ativo' ORDER BY 1,2").rows |> Enum.map(fn [t, a] -> {t, a} end)
 
   def tenants_da(automacao), do: q("SELECT tenant_id FROM vinculos WHERE automacao=$1 ORDER BY 1", [automacao]).rows |> List.flatten()
 end
