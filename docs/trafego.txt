@@ -1,0 +1,70 @@
+CRITERIOS - AUTOMACAO DE TRAFEGO PARA CORRETORES
+Estado em 2026-10-16. Fonte: rascunho do Mateus e decisoes da conversa.
+
+ESTRUTURA (tres automacoes independentes, ligadas conforme a instancia)
+1. Trafego (por conta): agentes, campanhas, metricas, custo de IA, conexao do WhatsApp, credenciais da conta de anuncio.
+2. Painel base: login, recuperacao de senha, verificacao de email, pagina da conta do usuario.
+3. Gestao de equipe (opcional): papeis, cadastro de corretores, filiacao, filtro, painel geral, auditoria.
+Regra de dependencia: trafego e painel base nao dependem da gestao de equipe. A gestao le o trafego pela fronteira do contrato.
+Instancia de uma pessoa so: trafego + painel base, um unico tenant, sem gestao de equipe.
+Onde mora o login (nucleo ou automacao de site): decidido na fase de tecnologia.
+
+PAINEL BASE
+P1. Tela de login, com recuperacao de senha e verificacao de email. Sem 2 fatores por ora.
+P2. Primeiro acesso por convite: quem cadastra o usuario envia o convite; a pessoa define a senha e verifica o email.
+P3. Pagina do usuario (corretor): informacoes da conta; suas campanhas e metricas; conexao do WhatsApp (QR e estado).
+
+GESTAO DE EQUIPE
+G1. Papeis: dono (Mateus e o socio; criam admins), admin (cadastra corretores), corretor.
+G2. Admin ve todos os corretores.
+G3. Cadastro de corretor: nome, sobrenome, nome de usuario, email, numero de WhatsApp, filiacao (gerente geral e superintendente, texto livre com sugestao dos valores ja usados) e credenciais da conta de anuncio (token de usuario do sistema da BM, id da pagina, id do gerenciador de anuncios, id do Instagram, id do pixel) e o site do corretor. Cada corretor tem a propria BM e o proprio token; uma pessoa da equipe configura as credenciais de cada um. O cadastro dispara o vincular do tenant, e o corretor completa a conexao lendo o QR.
+G4. Usuario, email e numero sao unicos. O numero cadastrado deve ser o que escaneou o QR.
+G5. Lista de corretores com filtro cruzado: nome, sobrenome, numero, email, filiacao.
+G6. Pagina do corretor (visao do admin): dados de cadastro com edicao e exclusao; campanhas como cards (nome, foto do criativo se imagem, tipo de campanha, metricas principais); ao clicar numa campanha, metricas mais relevantes e custo de tokens de IA em reais; aba IA.
+G7. Exclusao: desativar (reversivel) separado de excluir (apaga dados pessoais e desvincula a sessao). A campanha na Meta nao e apagada.
+G8. Painel geral: gasto total, campanhas ativas e custo de IA por corretor.
+G9. Status por corretor: WhatsApp conectado ou caido, token valido, ultima sincronizacao. Alertas: sessao caida, token invalido, campanha reprovada.
+G10. Log de auditoria: quem criou, editou ou excluiu o que.
+G11. Privacidade: o admin ve o que o agente fez, nao a conversa do corretor consigo mesmo.
+
+TRAFEGO (por conta)
+T1. Plataforma: Meta, com estrutura aberta para Google.
+T2. Token cifrado, mascarado na tela e validado ao cadastrar (alcanca a pagina, a conta de anuncio e o Instagram). Status "token invalido" visivel.
+T3. Isolamento do agente: so toca na conta de anuncio do corretor dele, mesmo que o token alcance mais.
+T4. "Campanha" significa tudo: campanha, conjunto e anuncio.
+T5. Fase 1: os agentes so fazem CRUD de campanha, sempre pausada, para validar o basico.
+T6. Depois da fase 1: o agente ativa a campanha. O corretor tem controle total da autorizacao: o agente sempre diz o que vai fazer e pede confirmacao em texto livre antes de qualquer alteracao; se a resposta for ambigua, pergunta de novo em mensagem curta ("so pra confirmar se entendi, posso fazer isso mesmo?"). Detalhes na modelagem da conversa, depois do CRUD validado.
+T7. Plano, agentes e aprendizado: ver PLANO E AGENTES (v1). A versao final sera modelada depois.
+T8. Metricas: gasto, alcance, cliques, mensagens iniciadas, custo por resultado, ultimos 7 dias. Tipo de campanha (objetivo) no card. O criativo pode ser imagem, video ou carrossel.
+T9. Custo de IA em reais, com cotacao diaria. Teto por corretor, com aviso e bloqueio.
+T10. Aba IA: grafo de agentes; ao clicar, o que ja fizeram, o que foi aprendido e os erros.
+T11. Meta: sem revisao de app e sem BM compartilhada; o fluxo e como se o corretor fizesse para ele mesmo. Confirma-se na primeira conexao, em leitura.
+
+PLANO E AGENTES (v1, basico generico)
+Formula: plano, execucao, verificacao, medicao contra a meta, ajuste proposto e confirmado. Cada passo e o laco do modelo.
+A1. Plano generico: destino (site, WhatsApp direto ou formulario da Meta), resultado (derivado do destino: evento do pixel, conversa iniciada ou lead), publico (definicao de segmentacao ou publico ja existente na conta), criativo (midia e texto, enviados pelo corretor no chat), orcamento (diario e teto total), janela (inicio e fim), meta (resultados desejados e custo maximo por resultado) e imovel opcional (vem do feed e monta a URL quando o destino e o site).
+A2. Cada destino declara suas exigencias (site: URL e pixel; WhatsApp: numero; formulario: o formulario). O plano so e confirmado com as exigencias satisfeitas, e o agente pede o que faltar. E o mesmo mecanismo de oferta e exigencia do nucleo.
+A3. Papeis: um unico agente de IA (cria e revisa o plano e le a confirmacao em texto livre); executor sem IA (cria tudo pausado); verificador decidivel (a execucao bate com o plano); monitor agendado sem IA (compara resultado e meta e emite meta batida, desvio ou dados insuficientes).
+A4. Ferramentas atras de um contrato de plataforma de anuncios; so o adaptador da Meta na v1. As credenciais vem do tenant, e o agente nunca informa id de conta.
+A5. Todo ajuste e uma proposta com confirmacao do corretor. Relatar e autonomo, alterar nao. Relatorios com limite de frequencia e resumo no lugar de aviso por evento, exceto desvio que queima verba.
+A6. Eventos do tenant: pedido, plano, confirmacao, operacao, verificacao, resultado e custo em tokens. A aba IA e uma projecao desses eventos.
+A7. Aprendizado minimo por tenant: registro da situacao (destino, publico, orcamento, criativo), da acao e do resultado contra a meta, com a regra violada nomeada. Ao propor um ajuste, le registros de situacoes parecidas. A promocao ao catalogo da automacao e manual.
+A8. Criativo: enviado pelo corretor no WhatsApp. Um verificador decidivel confere formato, proporcao e resolucao, e o agente confirma a que plano ele pertence.
+A9. Feed de imoveis: o Mateus expoe. Campos sugeridos: id estavel, nome, bairro e regiao, dormitorios, faixa de preco, status, imagem principal e data de atualizacao. Status esgotado vira evento do plano e propoe pausar.
+A10. Fases: (1) pedido, plano, confirmacao, criacao pausada e verificacao; (2) ativacao com confirmacao, monitor e relatorios; (3) ajuste proposto e aprendizado.
+A11. Fora da v1 (encaixes para a versao final): etapas encadeadas, publico de pessoas e LAL, modelo de plano escrito pela equipe, criacao de pixel e eventos, e funil depois do clique por informe do corretor.
+
+REGRAS GERAIS
+R1. Equipe interna: todos se conhecem, sem cobranca.
+R2. Uma instancia de uma pessoa so deve funcionar sem a gestao de equipe.
+R3. Regra de dominio (por exemplo, confirmar antes de gastar) e configuracao do dominio, nao do nucleo.
+
+EM ABERTO
+- Teto de gasto por campanha.
+- Onde mora o login.
+- Tecnologia dos agentes (modelo de IA por papel).
+- Versao final do plano: etapas encadeadas, publico de pessoas e LAL (com base legal da LGPD), modelo de plano escrito pela equipe e funil depois do clique.
+- Formato final do feed de imoveis.
+- Recebimento de midia pelo Amarula (criativos pelo WhatsApp), a verificar na construcao.
+- Fonte da cotacao do dolar.
+- Tipo de campanha: assumido como o objetivo da campanha (mensagens, leads, trafego etc.).
