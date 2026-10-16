@@ -122,7 +122,8 @@ defmodule Trafego.Plano do
     do: %{
       "nome" => "Plano #{p["id"]}: #{p["destino"]}", "objetivo" => p["resultado"], "destino" => p["destino"],
       "orcamento_diario" => p["orcamento_diario"], "teto_total" => p["teto_total"], "janela" => p["janela"],
-      "publico" => p["publico"], "criativo" => p["criativo"]
+      "publico" => p["publico"], "criativo" => p["criativo"],
+      "url" => p["url"], "url_final" => p["url_final"], "pixel" => p["pixel"], "numero" => p["numero"], "formulario" => p["formulario"]
     }
 
   def brl(c) when is_integer(c), do: "R$ #{div(c, 100)},#{c |> rem(100) |> Integer.to_string() |> String.pad_leading(2, "0")}"

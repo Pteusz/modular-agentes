@@ -7,19 +7,83 @@ defmodule Trafego.Agente do
   ambigua -> repergunta curta; negativa -> recusa. O texto do corretor nao vira evento.
   """
   alias Nucleo.Registro
-  alias Trafego.{Aprendizado, Evento, Executor, IA, Plano, Verificador}
+  alias Trafego.{Acesso, Aprendizado, Criativo, Evento, Executor, IA, Plano, Verificador}
 
   @nome "Nucleo.Automacoes.Trafego"
   @repergunta "so pra confirmar se entendi, posso fazer isso mesmo?"
 
   @doc "Processa uma mensagem do corretor. {:ok, resposta} | {:error, motivo}"
   def processar(tenant, texto) do
-    with :ok <- ativo(tenant), %{} <- Trafego.Acesso.conta(tenant) || {:error, :sem_conta} do
+    with :ok <- ativo(tenant), :ok <- credencial(tenant) do
       case Plano.atual(tenant) do
         %{"status" => "aguardando_confirmacao"} = p -> confirmar(tenant, p, texto)
         %{"status" => "rascunho"} = p -> planejar(tenant, p, texto, "complemento")
         nil -> planejar(tenant, Plano.novo(tenant), texto, "novo")
       end
+    end
+  end
+
+  @doc """
+  Criativo enviado pelo corretor (bytes + nome do arquivo). Conferencia decidivel (Trafego.Criativo): reprovado nao entra e a
+  resposta diz o motivo; aprovado e guardado e vira o criativo do plano em andamento, que volta a pedir confirmacao.
+  """
+  def receber_criativo(tenant, nome, bytes) do
+    with :ok <- ativo(tenant), :ok <- credencial(tenant) do
+      case Plano.atual(tenant) do
+        nil ->
+          {:ok, "Nao ha plano em andamento; me conta o que quer anunciar e depois manda o criativo."}
+
+        plano ->
+          case Criativo.conferir(bytes) do
+            {:ok, info} -> aceitar_criativo(tenant, plano, nome, bytes, info)
+            {:error, motivos} -> {:ok, "Esse criativo nao serve: #{Criativo.explicar(motivos)}. Manda outro arquivo."}
+          end
+      end
+    end
+  end
+
+  @doc """
+  Midia que chegou pelo canal (Amarula). Baixa e passa pela mesma conferencia. Se nao der para baixar, avisa e propoe
+  alternativa (mandar como documento ou colocar o arquivo no painel) em vez de fingir que recebeu.
+  """
+  def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: kind}} = msg) when kind in [:image, :document] do
+    case Amarula.download_media(msg) do
+      {:ok, bytes} when is_binary(bytes) ->
+        with {:ok, info} <- Criativo.conferir(bytes) do
+          receber_criativo(tenant, "criativo_#{System.unique_integer([:positive])}" <> extensao(info.formato), bytes)
+        else
+          {:error, motivos} -> {:ok, "Esse criativo nao serve: #{Criativo.explicar(motivos)}. Manda outro arquivo."}
+        end
+
+      _ ->
+        Evento.emitir(tenant, "operacao", nil, "planejador", "midia_nao_baixou", %{"erro" => "download_falhou"})
+        {:ok, "Recebi o aviso da midia mas nao consegui baixar o arquivo. Tenta mandar de novo como documento (sem compressao) ou coloca o arquivo no painel."}
+    end
+  end
+
+  def receber_midia(_tenant, _msg), do: {:ok, "So aceito imagem (png ou jpg) como criativo por enquanto; video fica para depois."}
+
+  defp extensao("png"), do: ".png"
+  defp extensao("jpeg"), do: ".jpg"
+  defp extensao("mp4"), do: ".mp4"
+
+  defp aceitar_criativo(tenant, plano, nome, bytes, info) do
+    nome = Path.basename(nome)
+    caminho = Executor.caminho_midia(tenant, nome)
+    File.mkdir_p!(Path.dirname(caminho))
+    File.write!(caminho, bytes)
+    texto = get_in(plano, ["criativo", "texto"])
+    plano = Map.put(plano, "criativo", Map.reject(%{"midia" => nome, "texto" => texto}, fn {_, v} -> is_nil(v) end))
+    Evento.emitir(tenant, "operacao", plano["id"], "planejador", "criativo_recebido", %{"formato" => info.formato, "largura" => info.largura, "altura" => info.altura})
+    concluir_plano(tenant, plano)
+  end
+
+  # credencial ausente ou recusada pela plataforma: o agente nao gasta IA nem tenta nada ate o corretor recadastrar
+  defp credencial(tenant) do
+    cond do
+      Acesso.conta(tenant) == nil -> {:error, :sem_conta}
+      Acesso.status(tenant) == "token invalido" -> {:ok, "O token de acesso da Meta esta invalido ou expirou. Preciso de um token novo para continuar; nada foi alterado."}
+      true -> :ok
     end
   end
 
@@ -97,7 +161,7 @@ defmodule Trafego.Agente do
 
       {:error, e} ->
         Plano.definir_atual(tenant, nil)
-        {:ok, "Nao consegui criar a campanha (#{e}). Nada ficou ativo; registrei o erro para a proxima proposta."}
+        {:ok, "Nao consegui criar a campanha (#{Executor.motivo(e)}). Nada ficou ativo; registrei o erro para a proxima proposta."}
     end
   end
 
