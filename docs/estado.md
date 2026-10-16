@@ -1,6 +1,6 @@
 # Estado
 VPS: vps2 (194.163.134.245), usuario pteuz. Projeto: /opt/modular-agentes. Ferramentas em .tools/ (fora do git); `source env.sh`.
-Etapa atual: 2 construida, aguardando aprovacao do contrato (branch etapa-2; etapa 1 aprovada e na main). Proxima: etapa 3.
+Etapa atual: 3 construida, aguardando aprovacao (branch etapa-3; etapas 0-2 aprovadas e na main). Proxima: definida pelo Mateus.
 
 ## Portas
 Faixa reservada: 4100-4119 (livre em 2026-10-16). Em uso na VPS: 22 53 80 81 443 631 5432 5499.
@@ -26,5 +26,11 @@ Gancho esqueleto so registra/bloqueia por config. Estabilidade de varios dias: n
 lib/nucleo/automacao.ex: behaviour Nucleo.Automacao (versao/0 do codigo; contrato/0 = %{versao MAJOR.MINOR, oferece, exige}; referencial/0; retencao/0; aprovacao/0). Nucleo fornece "registro","gancho","canal.texto" 1.0; a camada do cliente fornece o resto (mapa cap=>versao).
 Decisoes (Mateus): compativel se MAJOR do contrato = MAJOR do nucleo (1) e, por exigencia, MAJOR igual e MINOR fornecido >= exigido; encaixe declarado, checado so em Vincular.vincular/4 (modulo, canal, camada) ANTES de gravar; recusa = evento vinculo_recusado + {:error,{:incompativel,motivos}}, vinculo anterior intacto. Verificador: so :decidivel (outros recusados). Vincular segue funcao chamada pelo Mateus.
 Teste: test/etapa2_test.exs (mix test roda etapas 1 e 2; etapa 0 por `elixir test/etapa0_test.exs`).
+## Etapa 3 (automacao de teste) - pronta p/ aprovacao
+lib/nucleo/automacoes/eco.ex (Nucleo.Automacoes.Eco): implementa Nucleo.Automacao SEM alterar o contrato; referencial :decidivel com regras %{nome, ok?} (nao_vazia, tamanho_max<=80), retem contagem e ultima (:ultimo), aprovacao [:gastar].
+Para o laco executar, nova interface separada lib/nucleo/passo.ex (behaviour Nucleo.Passo, passo/2: entrada+retido -> saida, retido, acoes) e lib/nucleo/verificador.ex. Laco usa a automacao vinculada se ela implementa passo/2; senao segue o esqueleto da etapa 1.
+Fluxo: le retencao -> passo -> verificador (violacao: evento+estado regra_violada, nada retido nem enviado) -> grava retido -> acoes pelo gancho -> envia. Gancho passou a bloquear acao de aprovacao() sem config aprovado_<acao> (motivo requer_aprovacao; evento acao_bloqueada).
+Atualizar versao: Vincular (string, versao) -> :atualizado; estado (Registro) intocado. Teste: test/etapa3_test.exs (mix test roda etapas 1-3).
+Decisao para o Mateus: Nucleo.Passo e o molde do contrato de execucao; ok mante-lo separado do Nucleo.Automacao (contrato 1.0 intacto) ou promover ao contrato (exige MINOR/MAJOR)?
 ## Proximo passo
-Aprovar contrato (merge etapa-2) e iniciar etapa 3 (automacao de teste, verificador decidivel).
+Aprovar etapa 3 (merge) e definir a etapa seguinte.
