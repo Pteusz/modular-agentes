@@ -4,7 +4,7 @@ defmodule Nucleo.Automacoes.Eco do
   @behaviour Nucleo.Passo
 
   @impl Nucleo.Automacao
-  def versao, do: "0.1.0"
+  def versao, do: Application.spec(:eco, :vsn) |> to_string()
   @impl Nucleo.Automacao
   def contrato,
     do: %{versao: "1.0", oferece: %{"eco" => "1.0"}, exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}}

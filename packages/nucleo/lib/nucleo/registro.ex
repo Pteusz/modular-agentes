@@ -32,6 +32,7 @@ defmodule Nucleo.Registro do
         ],
         do: q(sql)
 
+    q("ALTER TABLE vinculos ADD COLUMN IF NOT EXISTS contrato jsonb")
     :ok
   end
 
@@ -104,15 +105,27 @@ defmodule Nucleo.Registro do
     |> Enum.map(fn [t, a, v, c] -> %{tenant: t, automacao: a, versao: v, canal: c} end)
   end
 
-  def gravar_vinculo(tenant, automacao, versao, canal) do
+  def gravar_vinculo(tenant, automacao, versao, canal), do: gravar_vinculo(tenant, automacao, versao, canal, nil)
+
+  @doc "Grava o vinculo; contrato (mapa) e o encaixe registrado da versao. Sem contrato, mantem o anterior."
+  def gravar_vinculo(tenant, automacao, versao, canal, contrato) do
     q(
       """
-      INSERT INTO vinculos (tenant_id, automacao, versao, canal) VALUES ($1,$2,$3,$4)
-      ON CONFLICT (tenant_id, automacao) DO UPDATE SET versao = EXCLUDED.versao, canal = EXCLUDED.canal
+      INSERT INTO vinculos (tenant_id, automacao, versao, canal, contrato) VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (tenant_id, automacao) DO UPDATE SET versao = EXCLUDED.versao, canal = EXCLUDED.canal,
+        contrato = COALESCE(EXCLUDED.contrato, vinculos.contrato)
       """,
-      [tenant, automacao, versao, canal]
+      [tenant, automacao, versao, canal, contrato]
     )
 
     :ok
   end
+
+  @doc "Contratos registrados dos vinculos do tenant: [%{automacao, contrato}] (contrato nil se vinculado so por versao)."
+  def contratos(tenant) do
+    q("SELECT automacao, contrato FROM vinculos WHERE tenant_id=$1 ORDER BY 1", [tenant]).rows
+    |> Enum.map(fn [a, c] -> %{automacao: a, contrato: c} end)
+  end
+
+  def tenants_da(automacao), do: q("SELECT tenant_id FROM vinculos WHERE automacao=$1 ORDER BY 1", [automacao]).rows |> List.flatten()
 end
