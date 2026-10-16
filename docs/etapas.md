@@ -70,6 +70,7 @@ Pronto: proposta aprovada.
 - Aprendizado minimo por tenant: situacao, acao, resultado contra a meta, regra violada nomeada; ao propor, le registros parecidos. Promocao ao catalogo manual (so a estrutura).
 - Gancho: nenhuma alteracao sem confirmacao.
 TESTE GERAL 4.1: pedido -> plano -> confirmacao em texto livre (clara, ambigua que repergunta, negativa) -> execucao pausada na plataforma simulada -> verificador acusa divergencia injetada; dois tenants com contas diferentes nao se enxergam; agente tentando acessar conta de outro tenant e barrado; erro vira registro e muda a proposta seguinte (estado lido de volta); atualizar versao do pacote trafego preserva o estado.
+STATUS 4.1: pronta em 2026-10-16 (branch etapa-4-1, test/etapa41_test.exs, packages/trafego), aguardando aprovacao do Mateus.
 
 4.2 Meta real e OpenAI real (fase 1)
 - Adaptador Meta (leitura e escrita; Graph API; versao fixada; leia a documentacao oficial atual). Credenciais do tenant cifradas; validacao ao cadastrar (alcanca pagina, conta de anuncio e Instagram); status "token invalido".
