@@ -30,11 +30,15 @@ defmodule Nucleo.Automacao do
       erros =
         (if major(c.versao) == major(@contrato_do_nucleo), do: [], else: ["contrato #{c.versao} incompativel com o do nucleo #{@contrato_do_nucleo}"]) ++
           (if mod.referencial().tipo in @tipos_aceitos, do: [], else: ["verificador #{inspect(mod.referencial().tipo)} nao aceito nesta etapa"]) ++
-          for {cap, req} <- c.exige, not atende?(fornece[cap], req), do: "exige #{cap} #{req}, fornecido #{inspect(fornece[cap])}"
+          nao_atendidas(c.exige, fornece)
 
       if erros == [], do: :ok, else: {:error, erros}
     end
   end
+
+  @doc "Motivos das exigencias (cap => \"M.m\") nao atendidas pelo que e fornecido (cap => versao)."
+  def nao_atendidas(exige, fornece),
+    do: for({cap, req} <- exige, not atende?(fornece[cap], req), do: "exige #{cap} #{req}, fornecido #{inspect(fornece[cap])}")
 
   defp forma(mod) do
     Code.ensure_loaded(mod)
