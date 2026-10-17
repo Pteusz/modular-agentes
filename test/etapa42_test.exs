@@ -45,6 +45,16 @@ defmodule Etapa42Test do
     {200, %{"data" => dados}}
   end
 
+  defp rota(est, "GET", ["VID" <> _ = id], _) do
+    v = Agent.get_and_update(est, fn s -> o = Map.update!(s.objs[id], "polls", &(&1 + 1)); {o, %{s | objs: Map.put(s.objs, id, o)}} end)
+
+    cond do
+      String.ends_with?(v["nome"], "-ruim.mp4") -> {200, %{"id" => id, "status" => %{"video_status" => "error"}}}
+      v["polls"] < 2 -> {200, %{"id" => id, "status" => %{"video_status" => "processing"}}}
+      true -> {200, %{"id" => id, "status" => %{"video_status" => "ready"}, "picture" => "https://cdn.exemplo/" <> id <> ".jpg"}}
+    end
+  end
+
   defp rota(est, "GET", [id], _) do
     Agent.get(est, fn s ->
       case s.objs[id] do
@@ -66,6 +76,13 @@ defmodule Etapa42Test do
           erro100()
       end
     end)
+  end
+
+  # video: sobe e fica "processing" na 1a leitura; "ready" (com miniatura) depois. Nome terminado em "-ruim" falha no processamento
+  defp rota(est, "POST", [conta, "advideos"], corpo) when conta in ["act_111", "act_222"] do
+    nome = (Regex.run(~r/filename="([^"]+)"/, corpo) || [nil, "v"]) |> List.last()
+    id = Agent.get_and_update(est, fn s -> n = s.seq + 1; {"VID#{n}", %{s | seq: n, objs: Map.put(s.objs, "VID#{n}", %{"kind" => "video", "nome" => nome, "polls" => 0})}} end)
+    {200, %{"id" => id}}
   end
 
   defp rota(est, "POST", [conta, "adimages"], corpo) when conta in ["act_111", "act_222"] do
@@ -180,7 +197,7 @@ defmodule Etapa42Test do
 
     Application.put_env(:trafego, :plataforma, Trafego.Plataforma.Meta)
     Application.put_env(:trafego, :provedor_ia, Trafego.IA.OpenAI)
-    Application.put_env(:trafego, :meta, base_url: HttpFalso.url(msrv), versao: "v26.0")
+    Application.put_env(:trafego, :meta, base_url: HttpFalso.url(msrv), versao: "v26.0", video_espera_ms: 1)
     Application.put_env(:trafego, :openai, base_url: HttpFalso.url(osrv), modelos: %{pequena: "modelo-pequena-x", media: "modelo-media-x"}, esforco: %{pequena: "none", media: "low"})
     Application.put_env(:trafego, :preco_usd_por_milhao, %{"modelo-media-x" => {1.0, 4.0}, "modelo-pequena-x" => {0.5, 2.0}})
     Application.put_env(:trafego, :cotacao_usd_brl, 5.0)
@@ -435,6 +452,24 @@ defmodule Etapa42Test do
     [adset] = for p <- Enum.drop(posts(msrv), antes), String.ends_with?(p.caminho, "/adsets"), do: URI.decode_query(p.corpo)
     assert %{"page_id" => "PAG1", "whatsapp_phone_number" => "5511999990000"} = Jason.decode!(adset["promoted_object"])
     assert adset["destination_type"] == "WHATSAPP"
+
+    # ---- 20. video: sobe, espera o processamento, usa a miniatura da Meta e cria o criativo video_data
+    vparams = Map.merge(params, %{"criativo" => %{"midia" => "v.mp4", "texto" => "tv"}, "criativo_bytes" => mp4(1080, 1920)})
+    antes = length(posts(msrv))
+    assert {:ok, lida} = Trafego.Plataforma.Meta.criar_campanha(cred, vparams)
+    novos = Enum.drop(posts(msrv), antes)
+    assert Enum.any?(novos, &String.ends_with?(&1.caminho, "/advideos"))
+    refute Enum.any?(novos, &String.ends_with?(&1.caminho, "/adimages"))
+    [vspec] = for p <- novos, String.ends_with?(p.caminho, "/adcreatives"), do: Jason.decode!(URI.decode_query(p.corpo)["object_story_spec"])
+    assert %{"video_data" => %{"video_id" => "VID" <> _, "image_url" => "https://cdn.exemplo/" <> _, "message" => "tv"}} = vspec
+    assert lida["status"] == "PAUSADA"
+    assert [%{"anuncios" => [%{"status" => "PAUSADA", "criativo" => %{"texto" => "tv"}}]}] = lida["conjuntos"]
+
+    # video que a Meta reprova no processamento: nada de campanha, erro claro
+    antes = length(posts(msrv))
+    ruim = Map.put(vparams, "criativo", %{"midia" => "v-ruim.mp4", "texto" => "tv"})
+    assert {:error, :video_reprovado_pela_meta} = Trafego.Plataforma.Meta.criar_campanha(cred, ruim)
+    refute Enum.any?(Enum.drop(posts(msrv), antes), &String.ends_with?(&1.caminho, "/campaigns"))
 
     # ---- 15. segredo nunca em log, evento nem estado; a conversa do corretor nao vira evento
     todos = Enum.map_join([ta, tb, tc, td], " ", &tudo/1)

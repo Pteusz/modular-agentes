@@ -45,10 +45,10 @@ defmodule Trafego.Plataforma.Meta do
   def criar_campanha(cred, p) do
     with :ok <- moeda(cred),
          {:ok, bytes, nome, mime} <- criativo(p),
-         {:ok, hash} <- subir_imagem(cred, bytes, nome, mime),
+         {:ok, midia} <- subir_midia(cred, bytes, nome, mime),
          {:ok, camp} <- criar(cred, "campaigns", campanha(cred, p), "campaigns", %{}),
          {:ok, conj} <- criar(cred, "adsets", conjunto(cred, p, camp), "adsets", %{"campanha_id" => camp}),
-         {:ok, cri} <- criar(cred, "adcreatives", criativo_meta(cred, p, nome, hash), "adcreatives", %{"campanha_id" => camp}),
+         {:ok, cri} <- criar(cred, "adcreatives", criativo_meta(cred, p, nome, midia), "adcreatives", %{"campanha_id" => camp}),
          {:ok, _ad} <- criar(cred, "ads", anuncio(cred, nome, conj, cri), "ads", %{"campanha_id" => camp}) do
       ler_campanha(cred, camp)
     end
@@ -110,9 +110,16 @@ defmodule Trafego.Plataforma.Meta do
     }
   end
 
-  defp criativo_meta(cred, p, nome, hash) do
+  defp criativo_meta(cred, p, nome, midia) do
     {link, cta} = chamada(p)
-    spec = %{"page_id" => cred["pagina_id"], "link_data" => %{"image_hash" => hash, "link" => link, "message" => get_in(p, ["criativo", "texto"]) || "", "call_to_action" => cta}}
+    texto = get_in(p, ["criativo", "texto"]) || ""
+
+    spec =
+      case midia do
+        {:imagem, hash} -> %{"page_id" => cred["pagina_id"], "link_data" => %{"image_hash" => hash, "link" => link, "message" => texto, "call_to_action" => cta}}
+        {:video, id, miniatura} -> %{"page_id" => cred["pagina_id"], "video_data" => %{"video_id" => id, "image_url" => miniatura, "message" => texto, "call_to_action" => cta}}
+      end
+
     spec = if cred["instagram_id"], do: Map.put(spec, "instagram_user_id", cred["instagram_id"]), else: spec
     %{"name" => nome, "object_story_spec" => Jason.encode!(spec)}
   end
@@ -183,7 +190,7 @@ defmodule Trafego.Plataforma.Meta do
             "anuncios" =>
               for ad <- get_in(a, ["ads", "data"]) || [] do
                 spec = get_in(ad, ["creative", "object_story_spec"]) || %{}
-                %{"id" => ad["id"], "status" => status(ad["status"]), "criativo" => %{"midia" => get_in(ad, ["creative", "name"]), "texto" => get_in(spec, ["link_data", "message"])}}
+                %{"id" => ad["id"], "status" => status(ad["status"]), "criativo" => %{"midia" => get_in(ad, ["creative", "name"]), "texto" => get_in(spec, ["link_data", "message"]) || get_in(spec, ["video_data", "message"])}}
               end
           }
         end
@@ -214,7 +221,7 @@ defmodule Trafego.Plataforma.Meta do
       nome = get_in(p, ["criativo", "midia"]) || "criativo"
 
       case f do
-        "mp4" -> {:error, :video_nao_suportado}
+        "mp4" -> {:ok, bytes, nome, "video/mp4"}
         "png" -> {:ok, bytes, nome, "image/png"}
         "jpeg" -> {:ok, bytes, nome, "image/jpeg"}
       end
@@ -223,6 +230,33 @@ defmodule Trafego.Plataforma.Meta do
 
   defp reprovado({:error, _}), do: {:error, :criativo_reprovado}
   defp reprovado(ok), do: ok
+
+  defp subir_midia(cred, bytes, nome, "video/mp4"), do: subir_video(cred, bytes, nome)
+  defp subir_midia(cred, bytes, nome, mime), do: with({:ok, hash} <- subir_imagem(cred, bytes, nome, mime), do: {:ok, {:imagem, hash}})
+
+  # video: sobe (multipart), espera a Meta terminar de processar e usa a miniatura que ela gera
+  defp subir_video(cred, bytes, nome) do
+    opcoes = [form_multipart: [name: nome, source: {bytes, filename: nome, content_type: "video/mp4"}], receive_timeout: Config.meta(:timeout_video, 180_000)]
+
+    with {:ok, %{"id" => id}} <- post(cred, conta_id(cred["conta_id"]) <> "/advideos", opcoes),
+         {:ok, miniatura} <- esperar_video(cred, id, Config.meta(:video_tentativas, 60)) do
+      {:ok, {:video, id, miniatura}}
+    else
+      {:ok, _} -> {:error, :resposta_inesperada}
+      {:error, e} -> {:error, e}
+    end
+  end
+
+  defp esperar_video(_cred, _id, 0), do: {:error, :video_processando}
+
+  defp esperar_video(cred, id, restantes) do
+    case get(cred, id, fields: "status,picture") do
+      {:ok, %{"status" => %{"video_status" => "ready"}, "picture" => pic}} when is_binary(pic) -> {:ok, pic}
+      {:ok, %{"status" => %{"video_status" => "error"}}} -> {:error, :video_reprovado_pela_meta}
+      {:ok, _} -> Process.sleep(Config.meta(:video_espera_ms, 3_000)); esperar_video(cred, id, restantes - 1)
+      {:error, e} -> {:error, e}
+    end
+  end
 
   defp subir_imagem(cred, bytes, nome, mime) do
     with {:ok, %{"images" => imagens}} <- post(cred, conta_id(cred["conta_id"]) <> "/adimages", form_multipart: [filename: {bytes, filename: nome, content_type: mime}]),
@@ -304,7 +338,7 @@ defmodule Trafego.Plataforma.Meta do
   defp pedir(cred, metodo, caminho, opcoes) do
     url = "#{Config.meta(:base_url, "https://graph.facebook.com")}/#{Config.meta(:versao, "v26.0")}/#{caminho}"
 
-    req = [method: metodo, url: url, headers: [{"authorization", "Bearer " <> cred["token"]}], retry: false, receive_timeout: Config.meta(:timeout, 30_000)] ++ opcoes
+    req = [method: metodo, url: url, headers: [{"authorization", "Bearer " <> cred["token"]}], retry: false, receive_timeout: Config.meta(:timeout, 30_000)] |> Keyword.merge(opcoes)
 
     case Req.request(req) |> decodificar() do
       {:ok, %{status: s, body: b}} when s in 200..299 -> {:ok, b}
