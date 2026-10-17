@@ -83,7 +83,15 @@ defmodule Etapa42Test do
     end
   end
 
-  defp rota(est, "POST", [conta, borda], corpo) when conta in ["act_111", "act_222"] and borda in ~w(adsets adcreatives ads), do: criar_obj(est, conta, borda, corpo)
+  defp rota(est, "POST", [conta, "adsets"], corpo) when conta in ["act_111", "act_222"] do
+    if corpo =~ "PAGSEMWA" do
+      {400, %{"error" => %{"message" => "Invalid parameter", "code" => 100, "error_subcode" => 2_446_886, "error_user_msg" => "Sua Pagina nao esta vinculada a uma conta do WhatsApp."}}}
+    else
+      criar_obj(est, conta, "adsets", corpo)
+    end
+  end
+
+  defp rota(est, "POST", [conta, borda], corpo) when conta in ["act_111", "act_222"] and borda in ~w(adcreatives ads), do: criar_obj(est, conta, borda, corpo)
 
   defp rota(est, "POST", [id], corpo) do
     Agent.get_and_update(est, fn s ->
@@ -415,6 +423,11 @@ defmodule Etapa42Test do
     assert {:ok, _} = Trafego.Plataforma.Meta.criar_campanha(cred, Map.put(params, "teto_total", 30_000))
 
     assert Trafego.Executor.motivo({:graph, 100, "sub=1 x"}) == "graph_100: sub=1 x"
+
+    # ---- 18. conjunto recusado (pagina sem WhatsApp Business): campanha ja criada fica PAUSADA registrada no parcial, com o motivo da Meta
+    wa = Map.merge(params, %{"destino" => "whatsapp", "numero" => "5511999990000"})
+    assert {:error, {:parcial, "adsets", %{"campanha_id" => _, "erro" => erro}}} = Trafego.Plataforma.Meta.criar_campanha(Map.put(cred, "pagina_id", "PAGSEMWA"), wa)
+    assert erro =~ "graph_100" and erro =~ "WhatsApp"
 
     # ---- 15. segredo nunca em log, evento nem estado; a conversa do corretor nao vira evento
     todos = Enum.map_join([ta, tb, tc, td], " ", &tudo/1)
