@@ -284,12 +284,22 @@ defmodule Trafego.Plataforma.Meta do
   defp get(cred, caminho, params), do: pedir(cred, :get, caminho, params: params)
   defp post(cred, caminho, opcoes), do: pedir(cred, :post, caminho, opcoes)
 
+  # a Graph responde JSON com content-type text/javascript: o Req nao decodifica, entao decodificamos aqui
+  defp decodificar({:ok, %{body: b} = r}) when is_binary(b) do
+    case Jason.decode(b) do
+      {:ok, m} -> {:ok, %{r | body: m}}
+      _ -> {:ok, r}
+    end
+  end
+
+  defp decodificar(r), do: r
+
   defp pedir(cred, metodo, caminho, opcoes) do
     url = "#{Config.meta(:base_url, "https://graph.facebook.com")}/#{Config.meta(:versao, "v26.0")}/#{caminho}"
 
     req = [method: metodo, url: url, headers: [{"authorization", "Bearer " <> cred["token"]}], retry: false, receive_timeout: Config.meta(:timeout, 30_000)] ++ opcoes
 
-    case Req.request(req) do
+    case Req.request(req) |> decodificar() do
       {:ok, %{status: s, body: b}} when s in 200..299 -> {:ok, b}
       {:ok, %{body: %{"error" => %{"code" => c}}}} when c in [190, 102] -> {:error, :token_invalido}
       {:ok, %{body: %{"error" => %{"code" => c} = e}}} when c in [4, 17, 32, 613, 80004] -> {:error, {:limite_de_taxa, e["message"] && String.slice(e["message"], 0, 120)}}

@@ -47,7 +47,7 @@ defmodule HttpFalso do
     {tipo, body} =
       case resp do
         {:bin, b} -> {"application/octet-stream", b}
-        m -> {"application/json", Jason.encode!(m)}
+        m -> {(if String.starts_with?(req.caminho, "/v1/"), do: "application/json", else: "text/javascript; charset=UTF-8"), Jason.encode!(m)}
       end
 
     :gen_tcp.send(s, ["HTTP/1.1 ", Integer.to_string(st), " X\r\ncontent-type: ", tipo, "\r\ncontent-length: ", Integer.to_string(byte_size(body)), "\r\nconnection: close\r\n\r\n", body])
