@@ -45,6 +45,17 @@ defmodule PainelBase.AuthHTML do
     """
   end
 
+  def verificar(assigns) do
+    ~H"""
+    <h1>Confirmar e-mail</h1>
+    <p class="apoio">Confirme que este endereço é seu para poder entrar.</p>
+    <form method="post" action={"/verificar/#{@token}"} class="formulario">
+      <.csrf />
+      <button type="submit" class="botao">Confirmar e-mail</button>
+    </form>
+    """
+  end
+
   def recuperar(%{enviado: true} = assigns) do
     ~H"""
     <h1>Recuperar senha</h1>

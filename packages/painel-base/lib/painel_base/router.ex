@@ -46,7 +46,8 @@ defmodule PainelBase.Router do
     post "/recuperar", AuthController, :recuperar
     get "/redefinir/:token", AuthController, :redefinir_form
     post "/redefinir/:token", AuthController, :redefinir
-    get "/verificar/:token", AuthController, :verificar
+    get "/verificar/:token", AuthController, :verificar_form
+    post "/verificar/:token", AuthController, :verificar
   end
 
   scope "/", PainelBase do

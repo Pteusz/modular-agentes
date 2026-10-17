@@ -56,8 +56,9 @@ defmodule Etapa43Test do
   end
 
   defp limpar do
-    for t <- ~w(pb_sessoes pb_tokens pb_tentativas), do: Postgrex.query!(Registro, "DELETE FROM #{t}", [])
+    # So o que e do teste: este banco e o de producao, convites e sessoes reais nao podem ser apagados aqui.
     Postgrex.query!(Registro, "DELETE FROM pb_usuarios WHERE email LIKE 'tp%@exemplo.test'", [])
+    Postgrex.query!(Registro, "DELETE FROM pb_tentativas WHERE chave LIKE 'e:tp%@exemplo.test' OR chave LIKE 'i:127.%' OR chave LIKE 'r:tp%'", [])
     for t <- ~w(estado eventos vinculos), do: Postgrex.query!(Registro, "DELETE FROM #{t} WHERE tenant_id LIKE 'tp\\_%'", [])
     Postgrex.query!(Registro, "DELETE FROM tenants WHERE id LIKE 'tp\\_%'", [])
   end
@@ -98,6 +99,7 @@ defmodule Etapa43Test do
 
     assert entrar(ea, @senha_a) |> html_response(200) =~ "E-mail ou senha inválidos", "convite ainda nao aceito: sem senha"
     pagina = get(novo(), "/convite/#{token}") |> html_response(200)
+    assert get(novo(), "/convite/#{token}") |> html_response(200) =~ "Definir senha", "GET duplo nao gasta o convite"
     assert pagina =~ "Definir senha" and pagina =~ "_csrf_token"
     assert post(novo(), "/convite/#{token}", %{"senha" => "curta", "senha_confirmacao" => "curta"}) |> html_response(200) =~ "pelo menos 10 caracteres"
     assert post(novo(), "/convite/#{token}", %{"senha" => @senha_a, "senha_confirmacao" => "outra-coisa-aqui"}) |> html_response(200) =~ "não conferem"
@@ -138,9 +140,13 @@ defmodule Etapa43Test do
     assert entrar("tp.nv#{u}@exemplo.test", "uma-senha-longa-123") |> html_response(200) =~ "Verifique seu e-mail"
     :ok = Usuarios.enviar_verificacao(nv)
     tv = ultimo_email() |> link("verificar")
-    assert get(novo(), "/verificar/#{tv}") |> redirected_to() == "/entrar"
+    assert get(novo(), "/verificar/#{tv}") |> html_response(200) =~ "Confirmar e-mail"
+    assert get(novo(), "/verificar/#{tv}") |> html_response(200) =~ "Confirmar e-mail", "GET nao gasta o token"
+    assert entrar("tp.nv#{u}@exemplo.test", "uma-senha-longa-123") |> html_response(200) =~ "Verifique seu e-mail"
+    assert post(novo(), "/verificar/#{tv}") |> redirected_to() == "/entrar"
     assert redirected_to(entrar("tp.nv#{u}@exemplo.test", "uma-senha-longa-123")) == "/"
     assert get(novo(), "/verificar/#{tv}") |> html_response(410) =~ "inválido ou já usado"
+    assert post(novo(), "/verificar/#{tv}") |> html_response(410) =~ "inválido ou já usado"
 
     # ---- 4. recuperacao de senha (mesma resposta com e sem conta; so o e-mail da conta recebe)
     r1 = post(novo(), "/recuperar", %{"email" => ea})

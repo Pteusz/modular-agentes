@@ -52,6 +52,14 @@ defmodule PainelBase.AuthController do
 
   def redefinir(conn, %{"token" => token} = p), do: definir(conn, token, "recuperacao", :redefinir, &Usuarios.redefinir/3, p)
 
+  # GET so confere (leitores de e-mail e antivirus abrem links sozinhos); quem gasta o token e o POST do botao.
+  def verificar_form(conn, %{"token" => token}) do
+    case Tokens.ver(token, "verificacao") do
+      {:ok, _} -> render(conn, :verificar, token: token)
+      :invalido -> invalido(conn)
+    end
+  end
+
   def verificar(conn, %{"token" => token}) do
     case Usuarios.verificar_email(token) do
       :ok -> redirect(conn, to: "/entrar")
