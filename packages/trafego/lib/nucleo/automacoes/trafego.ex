@@ -11,7 +11,7 @@ defmodule Nucleo.Automacoes.Trafego do
 
   @impl Nucleo.Automacao
   def contrato,
-    do: %{versao: "1.0", oferece: %{"trafego" => "1.0"}, exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}}
+    do: %{versao: "1.1", oferece: %{"trafego" => "1.0", "trafego.painel" => "1.0"}, exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}}
 
   @doc "Verificador decidivel: o que a plataforma devolveu bate com o plano. ctx: %{plano, campanha, conta_id}."
   @impl Nucleo.Automacao
@@ -32,6 +32,12 @@ defmodule Nucleo.Automacoes.Trafego do
       ]
     }
   end
+
+  @doc "Conversa do corretor (texto do chat dele consigo mesmo) -> resposta do agente. O laco chama; ver Nucleo.Laco."
+  def conversar(tenant, texto), do: Trafego.Agente.processar(tenant, texto)
+
+  @doc "Midia que chegou pelo canal (criativo pelo WhatsApp)."
+  def midia(tenant, msg), do: Trafego.Agente.receber_midia(tenant, msg)
 
   @impl Nucleo.Automacao
   def retencao,

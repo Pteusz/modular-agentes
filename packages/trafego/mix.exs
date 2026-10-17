@@ -1,12 +1,12 @@
 defmodule PTrafego.MixProject do
   use Mix.Project
-  @version "1.1.0"
+  @version "1.2.0"
 
   # Dev local (NUCLEO_LOCAL=1, posto pelo mix.exs da raiz): path. No cliente: git + sparse + tag, sem override.
   defp nucleo do
     if System.get_env("NUCLEO_LOCAL"),
       do: {:nucleo, path: "../nucleo"},
-      else: {:nucleo, git: System.get_env("NUCLEO_GIT", "https://github.com/Pteusz/modular-agentes.git"), sparse: "packages/nucleo", tag: System.get_env("NUCLEO_TAG", "nucleo-1.0.0")}
+      else: {:nucleo, git: System.get_env("NUCLEO_GIT", "https://github.com/Pteusz/modular-agentes.git"), sparse: "packages/nucleo", tag: System.get_env("NUCLEO_TAG", "nucleo-1.1.0")}
   end
 
   def project, do: [app: :trafego, version: @version, elixir: "~> 1.19", deps: [nucleo(), {:req, "== 0.7.5"}]]

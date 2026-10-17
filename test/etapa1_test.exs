@@ -82,6 +82,7 @@ defmodule Etapa1Test do
     own = fn msg -> msg.own end
     assert {:entregar, "x"} = Canal.Amarula.filtrar(%{own: true, type: :text, content: "x"}, own)
     assert :ignorar = Canal.Amarula.filtrar(%{own: false, type: :text, content: "x"}, own)
-    assert :ignorar = Canal.Amarula.filtrar(%{own: true, type: :media, content: nil}, own)
+    assert {:midia, _} = Canal.Amarula.filtrar(%{own: true, type: :media, content: nil}, own)
+    assert :ignorar = Canal.Amarula.filtrar(%{own: false, type: :media, content: nil}, own)
   end
 end

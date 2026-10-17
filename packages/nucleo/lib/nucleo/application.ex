@@ -5,6 +5,9 @@ defmodule Nucleo.Application do
   def start(_, _) do
     children = [
       {Postgrex, Nucleo.Registro.opcoes()},
+      {Registry, keys: :unique, name: Nucleo.LacoReg},
+      {Registry, keys: :duplicate, name: Nucleo.EstadoReg},
+      Nucleo.Canal.Estado,
       {DynamicSupervisor, name: Nucleo.Lacos, strategy: :one_for_one}
     ]
 

@@ -11,6 +11,8 @@ defmodule Trafego.Plataforma do
   @callback editar_campanha(cred, id :: String.t(), attrs :: map) :: {:ok, map} | {:error, term}
   @callback pausar_campanha(cred, id :: String.t()) :: {:ok, map} | {:error, term}
   @callback listar_campanhas(cred) :: {:ok, [map]} | {:error, term}
+  @doc "Metricas dos ultimos `dias` dias de UMA campanha da conta: gasto (centavos), alcance, cliques, mensagens_iniciadas, resultados."
+  @callback metricas(cred, id :: String.t(), dias :: pos_integer()) :: {:ok, map} | {:error, term}
 
   @doc "Adaptador em uso (config :trafego, :plataforma; padrao o simulado)."
   def adaptador, do: Application.get_env(:trafego, :plataforma, Trafego.Plataforma.Simulada)
