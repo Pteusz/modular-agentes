@@ -21,8 +21,8 @@ Teste: `set -a; source /opt/modular-agentes-data/db.env; set +a; MIX_ENV=test mi
 ## Etapa 4.2 (trafego 1.1.0; tag so apos aprovacao)
 - Unica dep nova: {:req, "== 0.7.5"} (ja no lock via Amarula; nada transitivo novo). Cifra AES-256-GCM (Trafego.Cifra): chaves SO em env (TRAFEGO_CIFRA_CHAVES "id:b64", TRAFEGO_CIFRA_ATUAL), tenant como AAD, tela mostra "****1234". Token invalido -> status "token invalido", agente para sem chamar IA.
 - Meta (Trafego.Plataforma.Meta): Graph v26.0 fixada em config; valida pagina/conta/Instagram ao cadastrar; cria tudo PAUSED (adimages, campaigns, adsets, adcreatives, ads), HOUSING, so BRL; leitura mapeada para o verificador. Video, publico estruturado e paginacao: fora (publico livre vai no nome do conjunto; segmentacao BR por config).
-- OpenAI (Trafego.IA.OpenAI): Responses API, json_schema estrito, store false; gpt-6-luna nas 2 faixas (esforco low/medium, config); custo = USD/milhao x cotacao manual (TRAFEGO_COTACAO_USD_BRL). Esforco valido da gpt-6-luna a confirmar na 1a chamada real.
+- OpenAI (Trafego.IA.OpenAI): Responses API, json_schema estrito, store false; gpt-6-luna nas 2 faixas (esforco low/medium, config); custo = USD/milhao x cotacao manual (TRAFEGO_COTACAO_USD_BRL). 1a chamada real OK: esforco low valido, imagem aceita (PNG 64x64; 1x1 da 400), json_schema estrito OK, ~US$0,00002. Medium ainda nao testado.
 - Criativo (Trafego.Criativo) decidivel: png/jpeg/mp4, proporcao 9:16 a 1,91:1, lado >= 600 px. Midia pelo canal: Agente.receber_midia (testado offline); recepcao pela CDN real do WhatsApp so com auto-mensagem do Mateus.
-- Segredos: /opt/modular-agentes-data/trafego.env (modelo, vazio) e PENDENCIAS_MATEUS.md.
+- Leitura real Meta: token, pagina e conta OK; Instagram cadastrado NAO esta ligado a pagina/conta (instagram_accounts vazio): Mateus liga ou omite META_INSTAGRAM_ID. Segredos: /opt/modular-agentes-data/trafego.env (modelo, vazio) e PENDENCIAS_MATEUS.md.
 ## Em aberto (aguardam o Mateus; propostas em 3 linhas no resumo da 4.1)
 - Teto de gasto por campanha; feed de imoveis; fonte da cotacao. Mateus: segredos da 4.2 e autorizar a 1a leitura real. Merge de etapa-4-2 so apos aprovacao.
