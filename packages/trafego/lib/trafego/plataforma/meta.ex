@@ -136,6 +136,8 @@ defmodule Trafego.Plataforma.Meta do
   defp destino_plano(_), do: "site"
 
   defp promovido(_cred, %{"destino" => "site"} = p), do: %{"pixel_id" => p["pixel"], "custom_event_type" => "LEAD"}
+  # WhatsApp: o numero do plano vai no promoted_object (nao exige vinculo previo do numero com a pagina)
+  defp promovido(cred, %{"destino" => "whatsapp", "numero" => n}) when is_binary(n) and n != "", do: %{"page_id" => cred["pagina_id"], "whatsapp_phone_number" => n}
   defp promovido(cred, _p), do: %{"page_id" => cred["pagina_id"]}
 
   defp chamada(%{"destino" => "whatsapp"} = p) do

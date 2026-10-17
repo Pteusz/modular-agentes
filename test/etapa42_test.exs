@@ -429,6 +429,13 @@ defmodule Etapa42Test do
     assert {:error, {:parcial, "adsets", %{"campanha_id" => _, "erro" => erro}}} = Trafego.Plataforma.Meta.criar_campanha(Map.put(cred, "pagina_id", "PAGSEMWA"), wa)
     assert erro =~ "graph_100" and erro =~ "WhatsApp"
 
+    # ---- 19. WhatsApp: o numero do plano vai no promoted_object do conjunto
+    antes = length(posts(msrv))
+    assert {:ok, _} = Trafego.Plataforma.Meta.criar_campanha(cred, wa)
+    [adset] = for p <- Enum.drop(posts(msrv), antes), String.ends_with?(p.caminho, "/adsets"), do: URI.decode_query(p.corpo)
+    assert %{"page_id" => "PAG1", "whatsapp_phone_number" => "5511999990000"} = Jason.decode!(adset["promoted_object"])
+    assert adset["destination_type"] == "WHATSAPP"
+
     # ---- 15. segredo nunca em log, evento nem estado; a conversa do corretor nao vira evento
     todos = Enum.map_join([ta, tb, tc, td], " ", &tudo/1)
     for s <- [@token, @chave_openai, "EAAROTACIONADO", "EAAERRADO"], do: (refute log =~ s; refute todos =~ s)
