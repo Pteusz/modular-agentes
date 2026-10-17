@@ -94,8 +94,14 @@ defmodule GestaoEquipe.EquipeController do
 
   defp codigo({:duplicado, campo}), do: "duplicado_#{campo}"
   defp codigo({:invalido, campo}), do: "invalido_#{campo}"
+  defp codigo({:inacessivel, campo}) when campo in [:conta, :pagina, :instagram], do: "inacessivel_#{campo}"
   defp codigo(e) when is_atom(e), do: Atom.to_string(e)
-  defp codigo(_), do: "erro"
+
+  defp codigo(e) do
+    require Logger
+    Logger.warning("gestao_equipe: erro sem mensagem propria: #{inspect(e, limit: 5, printable_limit: 120)}")
+    "erro"
+  end
 end
 
 defmodule GestaoEquipe.EquipeHTML do
@@ -123,6 +129,10 @@ defmodule GestaoEquipe.EquipeHTML do
     "invalido_usuario" => "Usuário inválido (3 a 40 letras, números, ponto, hífen ou _).",
     "invalido_numero" => "Número de WhatsApp inválido (com DDI e DDD).",
     "invalido_credencial" => "Informe o token e o id do gerenciador de anúncios.",
+    "inacessivel_conta" => "A Meta não deixou este token ler o gerenciador de anúncios informado. Confira o token e o id do gerenciador.",
+    "inacessivel_pagina" => "A Meta não deixou este token ler a página informada (o id da página é obrigatório). Confira o id da página.",
+    "inacessivel_instagram" => "A Meta não alcançou o Instagram informado.",
+    "token_invalido" => "A Meta recusou o token (inválido ou expirado).",
     "credencial_invalida" => "A plataforma recusou a credencial. Nada foi salvo.",
     "trafego_indisponivel" => "O módulo de tráfego não está disponível.",
     "email_falhou" => "Não foi possível enviar o convite por e-mail.",
@@ -221,7 +231,7 @@ defmodule GestaoEquipe.EquipeHTML do
       <h2>Conta de anúncio</h2>
       <.campo nome="token" rotulo="Token de acesso" tipo="password" req={!@edicao} dica={if @edicao, do: "Deixe em branco para manter o token salvo.", else: "Fica cifrado; ninguém o vê depois."} />
       <.campo nome="gerenciador_id" rotulo="Id do gerenciador de anúncios" valor={@v["gerenciador_id"]} req />
-      <.campo nome="pagina_id" rotulo="Id da página" valor={@v["pagina_id"]} />
+      <.campo nome="pagina_id" rotulo="Id da página" valor={@v["pagina_id"]} req />
       <.campo nome="instagram_id" rotulo="Id do Instagram" valor={@v["instagram_id"]} />
       <.campo nome="pixel_id" rotulo="Id do pixel" valor={@v["pixel_id"]} />
       <button type="submit" class="botao">{@botao}</button>
