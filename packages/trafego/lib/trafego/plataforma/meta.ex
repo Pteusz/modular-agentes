@@ -294,6 +294,11 @@ defmodule Trafego.Plataforma.Meta do
 
   defp decodificar(r), do: r
 
+  # a Graph so diz "Invalid parameter"; o motivo real vem em error_subcode / error_user_msg
+  defp detalhe(e) do
+    [e["error_subcode"] && "sub=#{e["error_subcode"]}", e["error_user_msg"] || e["message"]] |> Enum.reject(&is_nil/1) |> Enum.map_join(" ", &to_string/1)
+  end
+
   defp pedir(cred, metodo, caminho, opcoes) do
     url = "#{Config.meta(:base_url, "https://graph.facebook.com")}/#{Config.meta(:versao, "v26.0")}/#{caminho}"
 
@@ -303,7 +308,7 @@ defmodule Trafego.Plataforma.Meta do
       {:ok, %{status: s, body: b}} when s in 200..299 -> {:ok, b}
       {:ok, %{body: %{"error" => %{"code" => c}}}} when c in [190, 102] -> {:error, :token_invalido}
       {:ok, %{body: %{"error" => %{"code" => c} = e}}} when c in [4, 17, 32, 613, 80004] -> {:error, {:limite_de_taxa, e["message"] && String.slice(e["message"], 0, 120)}}
-      {:ok, %{body: %{"error" => %{"code" => c} = e}}} -> {:error, {:graph, c, String.slice(to_string(e["message"]), 0, 200)}}
+      {:ok, %{body: %{"error" => %{"code" => c} = e}}} -> {:error, {:graph, c, String.slice(detalhe(e), 0, 200)}}
       {:ok, %{status: 401}} -> {:error, :token_invalido}
       {:ok, %{status: s}} -> {:error, {:http, s}}
       {:error, ex} -> {:error, {:rede, ex |> Exception.message() |> String.slice(0, 120)}}

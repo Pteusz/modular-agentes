@@ -74,7 +74,29 @@ defmodule Etapa42Test do
     {200, %{"images" => %{nome => %{"hash" => "HASH_" <> nome}}}}
   end
 
-  defp rota(est, "POST", [conta, borda], corpo) when conta in ["act_111", "act_222"] and borda in ~w(campaigns adsets adcreatives ads) do
+  # limite minimo de gasto da campanha (R$300), como a Graph real: erro generico + subcodigo e mensagem ao usuario
+  defp rota(est, "POST", [conta, "campaigns"], corpo) when conta in ["act_111", "act_222"] do
+    if String.to_integer(URI.decode_query(corpo)["spend_cap"] || "30000") < 30_000 do
+      {400, %{"error" => %{"message" => "Invalid parameter", "code" => 100, "error_subcode" => 2_446_307, "error_user_msg" => "O limite de gastos da campanha precisa ser pelo menos R$300,00 para essa moeda."}}}
+    else
+      criar_obj(est, conta, "campaigns", corpo)
+    end
+  end
+
+  defp rota(est, "POST", [conta, borda], corpo) when conta in ["act_111", "act_222"] and borda in ~w(adsets adcreatives ads), do: criar_obj(est, conta, borda, corpo)
+
+  defp rota(est, "POST", [id], corpo) do
+    Agent.get_and_update(est, fn s ->
+      case s.objs[id] do
+        nil -> {erro100(), s}
+        o -> {{200, %{"success" => true}}, %{s | objs: Map.put(s.objs, id, Map.merge(o, URI.decode_query(corpo)))}}
+      end
+    end)
+  end
+
+  defp rota(_, _, _, _), do: erro100()
+
+  defp criar_obj(est, conta, borda, corpo) do
     kind = %{"campaigns" => "campaign", "adsets" => "adset", "adcreatives" => "creative", "ads" => "ad"}[borda]
     pref = %{"campaign" => "c", "adset" => "s", "creative" => "cr", "ad" => "a"}[kind]
 
@@ -88,17 +110,6 @@ defmodule Etapa42Test do
 
     {200, %{"id" => id}}
   end
-
-  defp rota(est, "POST", [id], corpo) do
-    Agent.get_and_update(est, fn s ->
-      case s.objs[id] do
-        nil -> {erro100(), s}
-        o -> {{200, %{"success" => true}}, %{s | objs: Map.put(s.objs, id, Map.merge(o, URI.decode_query(corpo)))}}
-      end
-    end)
-  end
-
-  defp rota(_, _, _, _), do: erro100()
 
   defp meta_injetar(est, id, attrs), do: Agent.update(est, fn s -> %{s | objs: Map.update!(s.objs, id, &Map.merge(&1, attrs))} end)
   defp meta_achar(est, kind, campo, valor), do: Agent.get(est, fn s -> Enum.find_value(s.objs, fn {id, o} -> o["kind"] == kind and o[campo] == valor && id end) end)
@@ -393,6 +404,15 @@ defmodule Etapa42Test do
     assert [sem, com] = specs
     assert sem =~ "PAG1" and not (sem =~ "instagram_user_id")
     assert com =~ "PAG1" and com =~ ~s("instagram_user_id":"IG1")
+
+    # ---- 17. erro da Graph traz subcodigo e mensagem ao usuario (antes so "Invalid parameter"); nada e criado
+    baixo = Map.put(params, "teto_total", 20_000)
+    antes = length(posts(msrv))
+    assert {:error, {:graph, 100, msg}} = Trafego.Plataforma.Meta.criar_campanha(cred, baixo)
+    assert msg =~ "sub=2446307" and msg =~ "R$300"
+    novos = Enum.drop(posts(msrv), antes)
+    assert Enum.all?(novos, &(String.ends_with?(&1.caminho, "/adimages") or String.ends_with?(&1.caminho, "/campaigns")))
+    assert {:ok, _} = Trafego.Plataforma.Meta.criar_campanha(cred, Map.put(params, "teto_total", 30_000))
 
     # ---- 15. segredo nunca em log, evento nem estado; a conversa do corretor nao vira evento
     todos = Enum.map_join([ta, tb, tc, td], " ", &tudo/1)
