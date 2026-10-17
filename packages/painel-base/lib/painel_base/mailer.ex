@@ -58,8 +58,11 @@ defmodule PainelBase.Mailer do
   end
 
   # verifica o certificado do servidor (cadeia + nome); nada de verify_none
+  # verify_peer sempre, com os CAs do sistema. O gen_smtp injeta {depth, 0} nas conexoes SSL e isso derruba cadeias com
+  # intermediarias (Hostinger/Sectigo: :max_path_length_reached); depth: 10 vem antes dele.
   defp tls_opts(host),
     do: [
+      depth: 10,
       versions: [:"tlsv1.2", :"tlsv1.3"],
       verify: :verify_peer,
       cacerts: :public_key.cacerts_get(),
