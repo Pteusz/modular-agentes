@@ -10,7 +10,7 @@ defmodule Nucleo.Automacoes.PainelBase do
   def versao, do: Application.spec(:painel_base, :vsn) |> to_string()
 
   @impl Nucleo.Automacao
-  def contrato, do: %{versao: "1.0", oferece: %{"painel" => "1.0"}, exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}}
+  def contrato, do: %{versao: "1.1", oferece: %{"painel" => "1.0", "painel.extensao" => "1.0"}, exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}}
 
   @impl Nucleo.Automacao
   def referencial, do: %{tipo: :decidivel, regras: []}

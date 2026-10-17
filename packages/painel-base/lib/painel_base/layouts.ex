@@ -69,7 +69,7 @@ defmodule PainelBase.Layouts do
   end
 
   def app(assigns) do
-    assigns = assigns |> Map.put(:nav, @nav) |> Map.put_new(:ativo, nil)
+    assigns = assigns |> Map.put_new(:nav, @nav) |> Map.put_new(:ativo, nil)
 
     ~H"""
     <header class="topo">

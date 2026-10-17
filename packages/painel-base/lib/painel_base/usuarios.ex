@@ -11,6 +11,16 @@ defmodule PainelBase.Usuarios do
 
   def por_email(email) when is_binary(email), do: q("SELECT #{@colunas} FROM pb_usuarios WHERE email=$1", [normalizar(email)]).rows |> mapa()
   def por_email(_), do: nil
+  @doc "Liga/desliga o acesso (reversivel). Desligar derruba as sessoes; quem esta inativo nao entra."
+  def ativar(id, ativo?) when is_boolean(ativo?) do
+    q("UPDATE pb_usuarios SET ativo=$2 WHERE id=$1", [id, ativo?])
+    if not ativo?, do: Sessoes.revogar_todas(id)
+    :ok
+  end
+
+  @doc "Apaga o usuario e o que e dele (tokens e sessoes vao junto). Irreversivel."
+  def remover(id), do: q("DELETE FROM pb_usuarios WHERE id=$1", [id]) && :ok
+
   def por_id(id), do: q("SELECT #{@colunas} FROM pb_usuarios WHERE id=$1", [id]).rows |> mapa()
 
   defp mapa([[id, t, e, n, h, v, a]]), do: %{id: id, tenant_id: t, email: e, nome: n, senha_hash: h, verificado_em: v, ativo: a}

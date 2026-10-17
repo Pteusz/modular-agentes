@@ -11,7 +11,7 @@ defmodule Nucleo.Automacoes.Trafego do
 
   @impl Nucleo.Automacao
   def contrato,
-    do: %{versao: "1.1", oferece: %{"trafego" => "1.0", "trafego.painel" => "1.0"}, exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}}
+    do: %{versao: "1.2", oferece: %{"trafego" => "1.0", "trafego.painel" => "1.0", "trafego.equipe" => "1.0"}, exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}}
 
   @doc "Verificador decidivel: o que a plataforma devolveu bate com o plano. ctx: %{plano, campanha, conta_id}."
   @impl Nucleo.Automacao

@@ -2,6 +2,7 @@ defmodule Nucleo.Inicializacao do
   @moduledoc """
   Valida os vinculos contra o que esta carregado (modulo + contrato atual). Reavaliada a cada inicializacao:
   - contrato incompativel (MAJOR.MINOR) -> vinculo inativo_incompativel + evento (so daquele tenant/automacao);
+  - vinculo desativado pelo administrador (estado "desativado") nunca e reativado aqui;
   - voltou a ser compativel -> vinculo_reativado (nada e apagado);
   - versao de codigo diferente com contrato compativel -> so atualiza a versao registrada (+ evento);
   - vinculo sem contrato registrado recebe o carregado (contrato_registrado).
@@ -42,6 +43,9 @@ defmodule Nucleo.Inicializacao do
     mod = Module.concat([automacao])
     if Code.ensure_loaded?(mod) and function_exported?(mod, :contrato, 0), do: mod
   end
+
+  # desativado pelo administrador: so o administrador reativa (a revalidacao nao mexe)
+  defp aplicar(_t, %{estado: "desativado"}, _mod, _resultado), do: :ok
 
   defp aplicar(t, l, mod, :ok) do
     contrato = mod.contrato() |> Jason.encode!() |> Jason.decode!()

@@ -131,6 +131,9 @@ defmodule Nucleo.Registro do
   def marcar_estado(tenant, automacao, estado),
     do: q("UPDATE vinculos SET estado=$3 WHERE tenant_id=$1 AND automacao=$2", [tenant, automacao, estado]) && :ok
 
+  @doc "Apaga TODAS as versoes de uma chave do tenant. Unico uso: exclusao de dados pessoais/credenciais (LGPD); o resto do estado e so-insercao."
+  def apagar_chave(tenant, chave), do: q("DELETE FROM estado WHERE tenant_id=$1 AND chave=$2", [tenant, chave]) && :ok
+
   def tenants_vinculados, do: q("SELECT DISTINCT tenant_id FROM vinculos ORDER BY 1").rows |> List.flatten()
 
   def inativos,

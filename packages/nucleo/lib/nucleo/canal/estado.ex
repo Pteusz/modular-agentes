@@ -11,7 +11,7 @@ defmodule Nucleo.Canal.Estado do
   def ler(tenant), do: Agent.get(__MODULE__, &Map.get(&1, tenant, :sem_sessao))
 
   def publicar(tenant, :sem_sessao) do
-    Agent.update(__MODULE__, &Map.delete(&1, tenant))
+    Agent.update(__MODULE__, &(&1 |> Map.delete(tenant) |> Map.delete({:numero, tenant})))
     avisar(tenant, :sem_sessao)
   end
 
@@ -19,6 +19,10 @@ defmodule Nucleo.Canal.Estado do
     Agent.update(__MODULE__, &Map.put(&1, tenant, estado))
     avisar(tenant, estado)
   end
+
+  @doc "Numero (so digitos) da conta de WhatsApp realmente pareada; so memoria. Serve para conferir com o numero cadastrado."
+  def publicar_numero(tenant, numero), do: Agent.update(__MODULE__, &Map.put(&1, {:numero, tenant}, numero))
+  def numero(tenant), do: Agent.get(__MODULE__, &Map.get(&1, {:numero, tenant}))
 
   def assinar(tenant), do: with({:ok, _} <- Registry.register(Nucleo.EstadoReg, tenant, nil), do: :ok)
 

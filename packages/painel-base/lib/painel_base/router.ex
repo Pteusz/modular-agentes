@@ -61,5 +61,8 @@ defmodule PainelBase.Router do
       live "/agente", AgenteLive
       live "/conta", ContaLive
     end
+
+    # extensoes de outros pacotes (ex.: gestao de equipe) entram aqui; sem extensao registrada, 404
+    forward "/equipe", Extensao, :equipe
   end
 end

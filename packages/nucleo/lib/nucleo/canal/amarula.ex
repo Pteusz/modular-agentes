@@ -9,7 +9,10 @@ defmodule Nucleo.Canal.Amarula do
   use GenServer
   alias Nucleo.Canal.Estado
 
-  @raiz "/opt/modular-agentes-data/amarula"
+  @raiz_padrao "/opt/modular-agentes-data/amarula"
+
+  @doc "Pasta das sessoes (configuravel: `config :nucleo, :sessoes_raiz`)."
+  def raiz, do: Application.get_env(:nucleo, :sessoes_raiz, @raiz_padrao)
 
   @doc "Decide se uma Amarula.Msg entra no laco (puro; testavel sem rede)."
   def filtrar(msg, own_chat?) do
@@ -28,7 +31,7 @@ defmodule Nucleo.Canal.Amarula do
 
   @impl GenServer
   def init({tenant, destino, opts}) do
-    dir = Keyword.get(opts, :dir, Path.join(@raiz, tenant))
+    dir = Keyword.get(opts, :dir, Path.join(raiz(), tenant))
     File.mkdir_p!(dir)
     Amarula.Supervisor.start_link([])
     Estado.publicar(tenant, :conectando)
@@ -43,6 +46,15 @@ defmodule Nucleo.Canal.Amarula do
       |> Amarula.connect(parent_pid: self())
 
     {:ok, %{conn: conn, destino: destino, tenant: tenant, aberto: false, imprimir: Keyword.get(opts, :imprimir_qr, true)}}
+  end
+
+  # numero realmente pareado (para a gestao conferir com o cadastrado); nunca derruba o canal
+  defp publicar_numero(s) do
+    Estado.publicar_numero(s.tenant, Amarula.own_address(s.conn).user |> to_string() |> String.replace(~r/\D/, ""))
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
   end
 
   @impl GenServer
@@ -74,6 +86,7 @@ defmodule Nucleo.Canal.Amarula do
 
   def handle_info({:amarula, :connection_update, %{connection: :open}}, s) do
     Estado.publicar(s.tenant, :conectado)
+    publicar_numero(s)
     {:noreply, %{s | aberto: true}}
   end
 
