@@ -35,6 +35,7 @@ defmodule Trafego.Executor do
   @doc "Motivo curto e sem dados sensiveis, para evento e resposta."
   def motivo({:parcial, etapa, _}), do: "parcial_#{etapa}"
   def motivo({:http, s}), do: "http_#{s}"
+  def motivo({:graph, c, m}) when is_binary(m), do: "graph_#{c}: " <> String.slice(m, 0, 160)
   def motivo(e) when is_atom(e), do: Atom.to_string(e)
   def motivo(_), do: "erro_inesperado"
 

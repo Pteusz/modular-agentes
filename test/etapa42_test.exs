@@ -414,6 +414,8 @@ defmodule Etapa42Test do
     assert Enum.all?(novos, &(String.ends_with?(&1.caminho, "/adimages") or String.ends_with?(&1.caminho, "/campaigns")))
     assert {:ok, _} = Trafego.Plataforma.Meta.criar_campanha(cred, Map.put(params, "teto_total", 30_000))
 
+    assert Trafego.Executor.motivo({:graph, 100, "sub=1 x"}) == "graph_100: sub=1 x"
+
     # ---- 15. segredo nunca em log, evento nem estado; a conversa do corretor nao vira evento
     todos = Enum.map_join([ta, tb, tc, td], " ", &tudo/1)
     for s <- [@token, @chave_openai, "EAAROTACIONADO", "EAAERRADO"], do: (refute log =~ s; refute todos =~ s)
