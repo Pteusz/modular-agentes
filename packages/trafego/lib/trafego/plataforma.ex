@@ -15,5 +15,10 @@ defmodule Trafego.Plataforma do
   @callback metricas(cred, id :: String.t(), dias :: pos_integer()) :: {:ok, map} | {:error, term}
 
   @doc "Adaptador em uso (config :trafego, :plataforma; padrao o simulado)."
-  def adaptador, do: Application.get_env(:trafego, :plataforma, Trafego.Plataforma.Simulada)
+  def adaptador do
+    case Application.get_env(:trafego, :plataforma) do
+      nil -> if System.get_env("TRAFEGO_PLATAFORMA") == "meta", do: Trafego.Plataforma.Meta, else: Trafego.Plataforma.Simulada
+      m -> m
+    end
+  end
 end
