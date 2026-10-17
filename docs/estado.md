@@ -1,10 +1,10 @@
 # Estado
 VPS: vps2 (194.163.134.245), usuario pteuz. Projeto: /opt/modular-agentes. Ferramentas em .tools/ (fora do git); `source env.sh`.
-Etapa atual: 4.1 pronta, aguardando aprovacao (branch etapa-4-1, sem merge). Etapas 0-3.1 e 4.0 aprovadas e na main (8fa6180). Proposta da 4.0 aprovada (login em painel-base, LiveView 1.2.12, Oban 2.24.1 so em painel-base/trafego, AES-256-GCM via :crypto, Swoosh, Req).
+Etapa atual: 4.2 aprovada pelo Mateus, provada com Meta e OpenAI reais (branch etapa-4-2, merge a cargo da sessao-mae). Etapas 0-4.1 aprovadas e na main (0d35992). Proposta da 4.0: login em painel-base, LiveView 1.2.12, Oban 2.24.1 so em painel-base/trafego, Swoosh.
 Faixa reservada: 4100-4119. Em uso na VPS: 22 53 80 81 443 631 5432 5499.
 Sem sudo: OTP 28.5.0.8, Elixir 1.19.6-otp-28, Hex 2.5.3. Postgres 16.15; banco modular_agentes (papel modular), URL em /opt/modular-agentes-data/db.env.
 Canal: Amarula 0.5.10 (puro Elixir), sessao em /opt/modular-agentes-data/amarula/mateus. ~35 MB/sessao; 50 tenants ~1,8 GB (estimativa). Risco: rota nao oficial.
-Teste: `set -a; source /opt/modular-agentes-data/db.env; set +a; MIX_ENV=test mix test` (etapas 1, 2, 3, 3.1; ~2 min; etapa 0 por `elixir test/etapa0_test.exs`).
+Teste: `set -a; source /opt/modular-agentes-data/db.env; set +a; MIX_ENV=test mix test` (etapas 1, 2, 3, 3.1, 4.1, 4.2; ~2 min; etapa 0 por `elixir test/etapa0_test.exs`).
 ## Decisoes fechadas
 - Contrato Nucleo.Automacao 1.0: oferece/exige, MAJOR igual e MINOR fornecido >= exigido; Nucleo.Passo separado do contrato. Verificador so :decidivel.
 - 3.1 A: pacotes Mix packages/nucleo e packages/eco no mesmo repo; raiz = projeto-hospedeiro (path). Cliente: git + sparse + tag (nucleo-X.Y.Z, eco-X.Y.Z), SEM override: tags divergentes devem ser alinhadas. Dev local: NUCLEO_LOCAL=1 (posto pelo mix.exs da raiz) troca git por path; NUCLEO_GIT muda a URL, NUCLEO_TAG a tag do nucleo.
@@ -16,12 +16,14 @@ Teste: `set -a; source /opt/modular-agentes-data/db.env; set +a; MIX_ENV=test mi
 ## Etapa 4.0
 - docs/etapas.md (etapa 4), docs/trafego.txt (copia fiel), docs/interface.md. Aviso "inicializacao nao validou" corrigido (migrar! antes de validar; ver correcoes.md).
 - nginx da vps2 = Nginx Proxy Manager em Docker (/opt/nginx-proxy-manager, admin :81, publica 80/443). O Mateus aplica o proxy host na 4.3; container alcanca o host pelo gateway Docker (a app precisa ouvir fora de 127.0.0.1).
-## Etapa 4.1 (packages/trafego 1.0.0, contrato 1.0; tag trafego-1.0.0 no fim)
-- Sem deps novas (so nucleo). Plataforma: behaviour Trafego.Plataforma + Simulada (Agent em memoria; token pode alcancar mais contas). IA: behaviour Trafego.IA + Falso deterministico (faixas :pequena/:media).
-- Trafego.Agente.processar(tenant, texto): plano atual (rascunho | aguardando) -> IA le confirmacao (sim executa; nao recusa; ambigua repergunta). Executor cria PAUSADO via Trafego.Acesso (conta SEMPRE do registro do tenant;  diferente = :conta_barrada). Gancho: Trafego.Gancho.alterar so passa com plano confirmado.
-- Estado no Registro: plano:<id>, trafego_atual, trafego_seq, trafego_conta (credencial SIMULADA em claro; cifra na 4.2), aprendizado (historico). Eventos: Trafego.Evento (so metadados; conversa e token nunca entram). custo_brl por tabela de config (placeholder).
-- Aprendizado: parecidos = mesmo destino e (mesmo publico ou orcamento +-50%); regra violada vira atencao na proposta seguinte. Catalogo: so candidatos_catalogo/1.
-- NAO ligado ao Nucleo.Laco ainda: Passo e puro e o fluxo tem efeitos; ligar ao WhatsApp na 4.3 (ver Nucleo.Passo, decisao da 4.5).
-## Em aberto (aguardam o Mateus; propostas em 3 linhas no resumo da 4.1)
-- Teto de gasto por campanha; formato do feed de imoveis; fonte da cotacao.
-- Merge de etapa-4-1 so apos aprovacao.
+## Etapa 4.1 (trafego 1.0.0, contrato 1.0, tag trafego-1.0.0 publicada)
+- Plataforma (behaviour + Simulada) e IA (behaviour + Falso). Agente.processar: plano atual -> IA le confirmacao livre (ambigua repergunta). Executor cria PAUSADO via Trafego.Acesso (conta SEMPRE do tenant; outra = :conta_barrada); Gancho exige plano confirmado. Estado no Registro (plano:<id>, trafego_atual/seq/conta, aprendizado); Evento so metadados. Nao ligado ao Laco (4.3).
+## Etapa 4.2 (trafego 1.1.1; tags trafego-1.1.0 e trafego-1.1.1 publicadas)
+- Unica dep nova: {:req, "== 0.7.5"} (ja no lock via Amarula; nada transitivo novo). Cifra AES-256-GCM (Trafego.Cifra): chaves SO em env (TRAFEGO_CIFRA_CHAVES "id:b64", TRAFEGO_CIFRA_ATUAL), tenant como AAD, tela mostra "****1234". Token invalido -> status "token invalido", agente para sem chamar IA.
+- Meta (Trafego.Plataforma.Meta): Graph v26.0 fixada em config; valida pagina/conta/Instagram ao cadastrar; cria tudo PAUSED (adimages, campaigns, adsets, adcreatives, ads), HOUSING, so BRL; leitura mapeada para o verificador. Video: advideos + espera do processamento + criativo video_data (PROVADO real: mp4 1080x1920 subiu, ficou ready, anuncio PAUSADO lido de volta). Publico estruturado e paginacao: fora (publico livre vai no nome do conjunto; segmentacao BR por config).
+- OpenAI (Trafego.IA.OpenAI): Responses API, json_schema estrito, store false; gpt-6-luna nas 2 faixas (esforco low/medium, config); custo = USD/milhao x cotacao manual (TRAFEGO_COTACAO_USD_BRL). 1a chamada real OK: esforco low valido, imagem aceita (PNG 64x64; 1x1 da 400), json_schema estrito OK, ~US$0,00002. Medium ainda nao testado.
+- Criativo (Trafego.Criativo) decidivel: png/jpeg/mp4, proporcao 9:16 a 1,91:1, lado >= 600 px. Midia pelo canal: Agente.receber_midia (testado offline); recepcao real PROVADA: Amarula entregou imagem (1200x1600 jpeg ok) e video mp4 (baixou 2,4 MB; reprovado por ser <600px, video fora da fase); imagem 739x1600 reprovada por proporcao. Falta ligar Canal.Amarula (hoje so texto) ao Agente.receber_midia.
+- Esforco medium testado na OpenAI real (gpt-6-luna): ok. Criacao PAUSED real (whatsapp, teto R$300, R$20/dia) FEITA e lida de volta: campanha 'TESTE 4.2 PAUSADA' PAUSADA com 1 conjunto e 1 anuncio PAUSADOS, criativo (imagem) subiu; exigiu numero ligado a BM + Pagina vinculada ao WhatsApp Business + numero no promoted_object. Nada ativado; sobras na conta de teste: 2 criativos soltos (exclusao so com autorizacao). Repeticao da leitura real (apos corrigir decode do corpo da Graph): validar_credencial ok, moeda BRL, conta ativa, instagram=nao_ligado, aviso instagram_nao_ligado. Leitura real Meta: token, pagina e conta OK; Instagram cadastrado NAO esta ligado a pagina/conta. DECIDIDO: pagina obrigatoria; Instagram OPCIONAL (nao alcancado/ausente = aviso instagram_nao_ligado, id nao gravado, criativo so com page_id; instagram_user_id so se validado). Docs Meta nao dizem se Instagram sem vinculo exige conta "Page-backed": decisao do Mateus. Segredos: /opt/modular-agentes-data/trafego.env (modelo, vazio) e PENDENCIAS_MATEUS.md.
+## Em aberto
+- Decididos: teto de gasto = teto_total obrigatorio + maximo por tenant em config; feed de imoveis = JSON por URL; cotacao manual ate a 4.5.
+- Canal.Amarula entregar midia ao Agente.receber_midia (4.3). Instagram sem vinculo exige conta Page-backed? (decisao do Mateus). Sobras de teste na conta da Meta (apagar so com ordem dele). TRAFEGO_COTACAO_USD_BRL vazia.

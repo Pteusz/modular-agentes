@@ -78,6 +78,7 @@ STATUS 4.1: pronta em 2026-10-16 (branch etapa-4-1, test/etapa41_test.exs, packa
 - Criativo: conferencia decidivel de formato, proporcao e resolucao; recebimento de midia pelo canal (Amarula) a verificar aqui; se nao receber, relate e proponha alternativa.
 - Primeiro teste real: leitura com a conta do Mateus. PARADA. Depois, com aprovacao, criar uma campanha PAUSADA em conta de teste e verificar.
 TESTE GERAL 4.2: ponta a ponta real em conta de teste, tudo pausado, verificador confere o que a Meta devolveu; custo de tokens registrado; token nunca aparece em log.
+4.2 FEITA ATE A PARADA (resumo): cifra AES-256-GCM (chave so em env), adaptador Meta (Graph v26.0 fixada, tudo PAUSED), provedor OpenAI (gpt-6-luna nas duas faixas, config), conferencia decidivel de criativo, midia pelo canal (Agente.receber_midia), custo de tokens em R$ por evento. TESTE GERAL 4.2 passa com servidores falsos (test/etapa42_test.exs). FALTA, com o Mateus: segredos em /opt/modular-agentes-data/trafego.env, autorizacao da 1a LEITURA real (Meta e OpenAI), depois (outra aprovacao) campanha PAUSADA na conta de teste e a prova de recepcao de midia na CDN real do WhatsApp.
 
 4.3 Painel base, dominio e WhatsApp pelo site
 - Pacote painel-base: login, convite por email, definicao de senha, verificacao de email, recuperacao de senha (SMTP via env). Sem 2 fatores por ora. Sessao segura, limite de tentativas.
