@@ -1,6 +1,6 @@
 # Estado
 VPS: vps2 (194.163.134.245), usuario pteuz. Projeto: /opt/modular-agentes. Ferramentas em .tools/ (fora do git); `source env.sh`.
-Etapa atual: 4.2 aprovada pelo Mateus, provada com Meta e OpenAI reais (branch etapa-4-2, merge feito pelo sessao-mae). Etapas 0-4.1 aprovadas e na main (0d35992). Proposta da 4.0: login em painel-base, LiveView 1.2.12, Oban 2.24.1 so em painel-base/trafego, Swoosh.
+Etapa atual: 4.2 aprovada pelo Mateus, provada com Meta e OpenAI reais (branch etapa-4-2, merge a cargo da sessao-mae). Etapas 0-4.1 aprovadas e na main (0d35992). Proposta da 4.0: login em painel-base, LiveView 1.2.12, Oban 2.24.1 so em painel-base/trafego, Swoosh.
 Faixa reservada: 4100-4119. Em uso na VPS: 22 53 80 81 443 631 5432 5499.
 Sem sudo: OTP 28.5.0.8, Elixir 1.19.6-otp-28, Hex 2.5.3. Postgres 16.15; banco modular_agentes (papel modular), URL em /opt/modular-agentes-data/db.env.
 Canal: Amarula 0.5.10 (puro Elixir), sessao em /opt/modular-agentes-data/amarula/mateus. ~35 MB/sessao; 50 tenants ~1,8 GB (estimativa). Risco: rota nao oficial.
