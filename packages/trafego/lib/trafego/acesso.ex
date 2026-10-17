@@ -9,7 +9,7 @@ defmodule Trafego.Acesso do
   alias Trafego.{Cifra, Evento, Plataforma}
 
   @ops ~w(criar_campanha ler_campanha editar_campanha pausar_campanha listar_campanhas metricas)a
-  @campos ~w(conta_id pagina_id instagram_id)
+  @campos ~w(conta_id pagina_id instagram_id pixel_id)
 
   def conta(tenant), do: Registro.ler(tenant, "trafego_conta")
 

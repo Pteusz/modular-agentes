@@ -9,7 +9,7 @@ defmodule PainelBase.AuthController do
     case Usuarios.autenticar(email, senha, conn.assigns.ip) do
       {:ok, u} ->
         token = Sessoes.criar(u.id)
-        conn |> configure_session(renew: true) |> put_session(:sessao_token, token) |> redirect(to: "/")
+        conn |> configure_session(renew: true) |> put_session(:sessao_token, token) |> redirect(to: PainelBase.Extensao.inicio(u))
 
       :bloqueado ->
         conn |> put_status(429) |> render(:entrar, erro: "Muitas tentativas. Aguarde alguns minutos e tente de novo.", email: "")

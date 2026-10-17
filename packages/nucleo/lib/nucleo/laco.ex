@@ -37,8 +37,9 @@ defmodule Nucleo.Laco do
   end
 
   # automacao ATIVA vinculada que implementa Nucleo.Passo; sem ela vale o esqueleto (contador).
-  # Se so ha vinculo inativo_incompativel, a automacao nao roda para este tenant (:inativo).
-  defp automacao(tenant) do
+  # Se so ha vinculo inativo_incompativel ou desativado (pelo admin), a automacao nao roda para este tenant (:inativo).
+  @doc false
+  def automacao(tenant) do
     linhas = Registro.contratos(tenant)
 
     ativa =
@@ -48,7 +49,7 @@ defmodule Nucleo.Laco do
           reduce: nil,
           do: (_ -> mod)
 
-    if ativa == nil and Enum.any?(linhas, &(&1.estado == "inativo_incompativel")), do: :inativo, else: ativa
+    if ativa == nil and Enum.any?(linhas, &(&1.estado in ["inativo_incompativel", "desativado"])), do: :inativo, else: ativa
   end
 
   defp canal_vinculado(tenant) do

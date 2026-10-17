@@ -88,6 +88,16 @@ input:focus-visible, .botao:focus-visible, a:focus-visible { outline: 3px solid 
 .papeis { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
 .papeis li { border-top: 1px solid var(--linha); padding-top: .5rem; display: flex; flex-wrap: wrap; gap: .25rem .6rem; }
 
+/* gestao de equipe */
+.botao.perigo { background: #8f1d1d; border-color: #8f1d1d; color: var(--branco); }
+.cartao.perigo { border-color: #8f1d1d; }
+.cartao.alerta { border-left: 4px solid #8a5a00; }
+.linha-estados { display: flex; flex-wrap: wrap; gap: .4rem .8rem; }
+a.botao { display: inline-block; text-decoration: none; }
+.mono { font-family: ui-monospace, monospace; word-break: break-all; }
+.aviso.ok { border-left: 4px solid #1d6b3a; }
+.aviso.erro { border-left: 4px solid #8f1d1d; }
+
 @media (min-width: 40rem) {
   .miolo { padding-bottom: 6rem; }
   .metricas { grid-template-columns: repeat(3, 1fr); }

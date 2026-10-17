@@ -129,7 +129,7 @@ defmodule Etapa44Test do
     assert c.tenant_id =~ ~r/^tp_c\d+$/
 
     # tenant vinculado ao tráfego e ao painel, ativos
-    assert %{"trafego" => "ativo", "painel-base" => "ativo"} = vinculos_de(c.tenant_id)
+    assert %{"Nucleo.Automacoes.Trafego" => "ativo", "Nucleo.Automacoes.PainelBase" => "ativo"} = vinculos_de(c.tenant_id)
 
     # nenhum segredo em claro na tabela da gestao
     [[linha]] = Postgrex.query!(Registro, "SELECT row_to_json(g)::text FROM ge_corretores g WHERE id=$1", [c.id]).rows
@@ -269,7 +269,7 @@ defmodule Etapa44Test do
 
     # ---- reativar volta tudo
     assert :ok = GestaoEquipe.reativar(admin, c.id)
-    assert %{"trafego" => "ativo", "painel-base" => "ativo"} = vinculos_de(t)
+    assert %{"Nucleo.Automacoes.Trafego" => "ativo", "Nucleo.Automacoes.PainelBase" => "ativo"} = vinculos_de(t)
     assert redirected_to(entrar(d["email"])) == "/"
     assert {:ok, _} = Conexao.conectar(t)
     Conexao.encerrar(t)
@@ -355,6 +355,8 @@ defmodule Etapa44Test do
     Nucleo.Canal.Estado.publicar(t, :desconectado)
     Simulada.injetar(camp["id"], %{"status" => "WITH_ISSUES"})
     Nucleo.Canal.Estado.publicar_numero(t, "5511000000000")
+    assert {:ok, _} = GestaoEquipe.sincronizar(admin, c.id)
+    # depois o token cai: valem os ultimos numeros conhecidos (a campanha reprovada continua no alerta)
     Simulada.registrar_token(d["token"], [])
     assert {:ok, _} = GestaoEquipe.sincronizar(admin, c.id)
     tipos = for a <- GestaoEquipe.alertas(admin), a.corretor_id == c.id, do: a.tipo

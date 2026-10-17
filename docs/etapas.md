@@ -89,6 +89,7 @@ TESTE GERAL 4.2: ponta a ponta real em conta de teste, tudo pausado, verificador
 TESTE GERAL 4.3: convite -> senha -> login -> ver campanhas proprias -> QR/estado do WhatsApp; usuario A nunca ve dados do B; email de recuperacao chega (ambiente do Mateus).
 
 4.4 Gestao de equipe
+- STATUS: implementada na branch etapa-4-4, teste geral e etapas anteriores passando (18 testes, 0 falhas); aguarda aprovacao (sem merge, sem tags).
 - Pacote gestao-equipe: papeis (dono cria admins; admin cadastra corretores; corretor), cadastro com todos os campos (G3 do trafego.txt), unicidade de usuario/email/numero, o cadastro dispara o vincular do tenant, filiacao em texto livre com sugestao, lista com filtro cruzado, pagina do corretor para o admin, desativar (reversivel) separado de excluir (apaga dados pessoais e desvincula a sessao; campanha na Meta nao e apagada), painel geral, status e alertas, log de auditoria.
 TESTE GERAL 4.4: admin cadastra corretor -> tenant vinculado -> corretor completa pelo convite; desativar bloqueia o agente; excluir apaga dados pessoais; admin nao ve a conversa propria; instancia de uma pessoa funciona sem este pacote.
 
