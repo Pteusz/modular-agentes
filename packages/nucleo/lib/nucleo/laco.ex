@@ -12,7 +12,7 @@ defmodule Nucleo.Laco do
     do:
       DynamicSupervisor.start_child(Nucleo.Lacos, %{
         id: tenant,
-        start: {GenServer, :start_link, [__MODULE__, {tenant, opts}]},
+        start: {GenServer, :start_link, [__MODULE__, {tenant, opts}, [name: {:via, Registry, {Nucleo.LacoReg, tenant}}]]},
         restart: :temporary
       })
 
@@ -23,7 +23,17 @@ defmodule Nucleo.Laco do
     Nucleo.Inicializacao.validar(tenant)
     mod = opts[:canal] || canal_vinculado(tenant)
     {:ok, ref} = mod.iniciar(tenant, self(), opts[:canal_opts] || [])
-    {:ok, %{tenant: tenant, mod: mod, ref: ref, auto: automacao(tenant)}}
+    {:ok, %{tenant: tenant, mod: mod, ref: ref, auto: automacao(tenant), conv: conversa(tenant)}}
+  end
+
+  # automacao ATIVA que conversa em texto livre (conversar/2) e/ou trata midia (midia/2), sem ser um Passo.
+  # Ex.: trafego. Passo (Eco) tem precedencia: se existe, o laco usa o passo.
+  defp conversa(tenant) do
+    for %{automacao: a, estado: "ativo"} <- Registro.contratos(tenant),
+        mod = Module.concat([a]),
+        Code.ensure_loaded?(mod) and function_exported?(mod, :conversar, 2),
+        reduce: nil,
+        do: (_ -> mod)
   end
 
   # automacao ATIVA vinculada que implementa Nucleo.Passo; sem ela vale o esqueleto (contador).
@@ -51,6 +61,14 @@ defmodule Nucleo.Laco do
 
   @impl GenServer
   def handle_info({:mensagem, _}, %{auto: :inativo} = s), do: {:noreply, s}
+  def handle_info({:midia, _}, %{auto: :inativo} = s), do: {:noreply, s}
+
+  def handle_info({:midia, msg}, %{conv: conv} = s) when conv != nil do
+    if function_exported?(conv, :midia, 2), do: conversar(s, fn -> conv.midia(s.tenant, msg) end)
+    {:noreply, s}
+  end
+
+  def handle_info({:midia, _}, s), do: {:noreply, s}
 
   def handle_info({:mensagem, texto}, %{auto: auto} = s) when auto != nil do
     retido = for %{chave: k, leitura: l} <- auto.retencao(), into: %{}, do: {k, ler(s.tenant, k, l)}
@@ -74,6 +92,11 @@ defmodule Nucleo.Laco do
     {:noreply, s}
   end
 
+  def handle_info({:mensagem, texto}, %{conv: conv} = s) when conv != nil do
+    conversar(s, fn -> conv.conversar(s.tenant, texto) end)
+    {:noreply, s}
+  end
+
   def handle_info({:mensagem, _texto}, s) do
     n = ((Registro.ler(s.tenant, "contador") || %{})["n"] || 0) + 1
     {:ok, _} = Registro.gravar(s.tenant, "contador", %{"n" => n})
@@ -82,6 +105,17 @@ defmodule Nucleo.Laco do
   end
 
   def handle_info(_, s), do: {:noreply, s}
+
+  # o texto/midia do corretor nao vira evento: so o resultado (resposta enviada ou falha sem conteudo)
+  defp conversar(s, f) do
+    case f.() do
+      {:ok, resposta} when is_binary(resposta) -> responder(s, resposta)
+      {:error, e} -> Registro.evento(s.tenant, "conversa_falhou", %{"erro" => inspect(e)})
+      _ -> :ok
+    end
+  rescue
+    e -> Registro.evento(s.tenant, "conversa_falhou", %{"erro" => e.__struct__ |> inspect()})
+  end
 
   defp ler(t, k, :ultimo), do: Registro.ler(t, k)
   defp ler(t, k, :historico), do: Enum.map(Registro.historico(t, k), & &1.valor)

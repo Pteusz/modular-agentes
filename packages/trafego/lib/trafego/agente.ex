@@ -46,8 +46,8 @@ defmodule Trafego.Agente do
   Midia que chegou pelo canal (Amarula). Baixa e passa pela mesma conferencia. Se nao der para baixar, avisa e propoe
   alternativa (mandar como documento ou colocar o arquivo no painel) em vez de fingir que recebeu.
   """
-  def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: kind}} = msg) when kind in [:image, :document] do
-    case Amarula.download_media(msg) do
+  def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: kind}} = msg) when kind in [:image, :document, :video] do
+    case baixar(msg) do
       {:ok, bytes} when is_binary(bytes) ->
         with {:ok, info} <- Criativo.conferir(bytes) do
           receber_criativo(tenant, "criativo_#{System.unique_integer([:positive])}" <> extensao(info.formato), bytes)
@@ -61,7 +61,10 @@ defmodule Trafego.Agente do
     end
   end
 
-  def receber_midia(_tenant, _msg), do: {:ok, "So aceito imagem (png ou jpg) como criativo por enquanto; video fica para depois."}
+  def receber_midia(_tenant, _msg), do: {:ok, "So aceito imagem (png ou jpg) ou video mp4 como criativo."}
+
+  # download pelo canal; trocavel por config (:trafego, :baixar_midia) para teste sem rede
+  defp baixar(msg), do: Application.get_env(:trafego, :baixar_midia, &Amarula.download_media/1).(msg)
 
   defp extensao("png"), do: ".png"
   defp extensao("jpeg"), do: ".jpg"

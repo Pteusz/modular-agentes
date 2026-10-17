@@ -81,6 +81,7 @@ TESTE GERAL 4.2: ponta a ponta real em conta de teste, tudo pausado, verificador
 4.2 FEITA ATE A PARADA (resumo): cifra AES-256-GCM (chave so em env), adaptador Meta (Graph v26.0 fixada, tudo PAUSED), provedor OpenAI (gpt-6-luna nas duas faixas, config), conferencia decidivel de criativo, midia pelo canal (Agente.receber_midia), custo de tokens em R$ por evento. TESTE GERAL 4.2 passa com servidores falsos (test/etapa42_test.exs). FALTA, com o Mateus: segredos em /opt/modular-agentes-data/trafego.env, autorizacao da 1a LEITURA real (Meta e OpenAI), depois (outra aprovacao) campanha PAUSADA na conta de teste e a prova de recepcao de midia na CDN real do WhatsApp.
 
 4.3 Painel base, dominio e WhatsApp pelo site
+- STATUS: implementada na branch etapa-4-3, teste geral e etapas anteriores passando (12 testes); aguarda aprovacao, dominio/TLS (Mateus) e SMTP (Mateus).
 - Pacote painel-base: login, convite por email, definicao de senha, verificacao de email, recuperacao de senha (SMTP via env). Sem 2 fatores por ora. Sessao segura, limite de tentativas.
 - Pagina do corretor: conta, campanhas e metricas (gasto, alcance, cliques, mensagens iniciadas, custo por resultado, 7 dias), plano aguardando, conexao do WhatsApp (QR e estado) via canal Amarula, uma sessao por tenant.
 - UI conforme docs/interface.md.

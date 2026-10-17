@@ -71,6 +71,35 @@ defmodule Trafego.Plataforma.Meta do
   end
 
   @impl true
+  def metricas(cred, id, dias) do
+    fim = Date.utc_today()
+    janela = Jason.encode!(%{"since" => Date.to_iso8601(Date.add(fim, -(dias - 1))), "until" => Date.to_iso8601(fim)})
+
+    with {:ok, _} <- get_da_conta(cred, id),
+         {:ok, r} <- get(cred, id <> "/insights", fields: "spend,reach,clicks,actions", time_range: janela, level: "campaign") do
+      linha = r |> Map.get("data", []) |> List.first() || %{}
+      acoes = for %{"action_type" => t, "value" => v} <- linha["actions"] || [], into: %{}, do: {t, inteiro(v) || 0}
+      msgs = acoes["onsite_conversion.messaging_conversation_started_7d"] || 0
+      leads = (acoes["lead"] || 0) + (acoes["offsite_conversion.fb_pixel_lead"] || 0)
+
+      {:ok,
+       %{
+         "gasto" => reais_em_centavos(linha["spend"]), "alcance" => inteiro(linha["reach"]) || 0, "cliques" => inteiro(linha["clicks"]) || 0,
+         "mensagens_iniciadas" => msgs, "resultados" => msgs + leads
+       }}
+    end
+  end
+
+  defp reais_em_centavos(nil), do: 0
+
+  defp reais_em_centavos(s) do
+    case Float.parse(to_string(s)) do
+      {v, _} -> round(v * 100)
+      :error -> 0
+    end
+  end
+
+  @impl true
   def editar_campanha(_cred, _id, %{"status" => st}) when st not in ["PAUSADA", "PAUSED"], do: {:error, :ativacao_fora_da_fase}
 
   def editar_campanha(cred, id, attrs) do

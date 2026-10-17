@@ -1,0 +1,95 @@
+/* modular agentes - painel do corretor. Fontes Geist locais (OFL), sem CDN. Mobile first. */
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+
+:root {
+  --cobalto: #2B44C8;
+  --nevoa: #E9EDFB;
+  --papel: #F7F6F2;
+  --branco: #FFFFFF;
+  --tinta: #14161F;
+  --linha: #E7E5DE;
+  --ok: #1F7A5A;
+  --atencao: #A8620B;
+  --erro: #B3362F;
+  --raio: 12px;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--papel); color: var(--tinta);
+  font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 16px; line-height: 1.5;
+}
+a { color: var(--cobalto); text-underline-offset: 3px; }
+h1 { font-size: 1.5rem; line-height: 1.2; margin: 0 0 1rem; letter-spacing: -0.01em; }
+h2 { font-size: 1rem; margin: 0 0 .5rem; }
+p { margin: 0 0 .75rem; }
+code, .mono { font-family: "Geist Mono", ui-monospace, monospace; }
+
+.marca-linha { display: flex; align-items: center; gap: .6rem; color: var(--cobalto); }
+.marca-linha .nome { color: var(--tinta); font-weight: 600; letter-spacing: -0.01em; }
+.marca { display: block; }
+
+.topo { padding: .9rem 1rem; background: var(--branco); border-bottom: 1px solid var(--linha); }
+.miolo { max-width: 40rem; margin: 0 auto; padding: 1rem 1rem 6rem; }
+
+.cartao { background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem; margin-bottom: .9rem; }
+.cartao h2 a { text-decoration: none; }
+
+/* navegacao inferior: o ativo tem sublinhado e negrito, nao so cor */
+.inferior {
+  position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--branco); border-top: 1px solid var(--linha); padding-bottom: env(safe-area-inset-bottom);
+}
+.inferior a { display: flex; justify-content: center; align-items: center; min-height: 3.5rem; color: var(--tinta); text-decoration: none; font-size: .9rem; }
+.inferior a.ativo { font-weight: 700; color: var(--cobalto); box-shadow: inset 0 3px 0 var(--cobalto); }
+
+/* metricas */
+.periodo { color: #4a4e5c; font-size: .85rem; margin-bottom: .4rem; }
+.metricas { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem .9rem; margin: 0; }
+.metricas > div { border-top: 1px solid var(--linha); padding-top: .4rem; }
+.metricas dt { font-size: .8rem; color: #4a4e5c; }
+.metricas dd { margin: 0; font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.estado { display: inline-flex; align-items: center; gap: .35rem; font-weight: 600; font-size: .9rem; border: 1px solid var(--linha); border-radius: 999px; padding: .1rem .6rem; }
+.simbolo { font-family: "Geist Mono", monospace; }
+
+/* fala do agente */
+.fala { background: var(--nevoa); border-radius: var(--raio); padding: .8rem 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fala .prefixo { font-family: "Geist Mono", monospace; font-weight: 600; color: var(--cobalto); }
+
+.aviso { border-radius: var(--raio); padding: .7rem .9rem; border: 1px solid var(--linha); background: var(--branco); }
+.aviso.ok { border-color: var(--ok); color: var(--ok); }
+.aviso.erro { border-color: var(--erro); color: var(--erro); }
+.aviso.atencao { border-color: var(--atencao); color: var(--atencao); margin-top: .75rem; }
+.apoio { color: #4a4e5c; font-size: .9rem; }
+.voltar { font-size: .9rem; }
+
+/* entrada */
+.auth { max-width: 24rem; margin: 0 auto; padding: 2rem 1.25rem; }
+.auth .marca-linha { margin-bottom: 1.75rem; }
+.formulario { display: grid; gap: .5rem; margin-bottom: 1rem; }
+.formulario label { font-size: .9rem; font-weight: 600; margin-top: .4rem; }
+.formulario input {
+  font: inherit; padding: .7rem .8rem; border: 1px solid #b9b6aa; border-radius: 10px; background: var(--branco); color: var(--tinta); min-height: 2.75rem;
+}
+input:focus-visible, .botao:focus-visible, a:focus-visible { outline: 3px solid var(--cobalto); outline-offset: 2px; }
+.botao {
+  font: inherit; font-weight: 600; margin-top: .8rem; min-height: 2.75rem; padding: .6rem 1.1rem; border-radius: 10px; border: 1px solid var(--cobalto);
+  background: var(--cobalto); color: var(--branco); cursor: pointer;
+}
+.botao.secundario { background: var(--branco); color: var(--cobalto); }
+
+/* QR do WhatsApp */
+.qr-caixa { text-align: center; margin: .75rem 0; }
+.qr { width: 100%; max-width: 16rem; height: auto; background: var(--branco); border: 1px solid var(--linha); border-radius: var(--raio); padding: .5rem; }
+
+.papeis { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.papeis li { border-top: 1px solid var(--linha); padding-top: .5rem; display: flex; flex-wrap: wrap; gap: .25rem .6rem; }
+
+@media (min-width: 40rem) {
+  .miolo { padding-bottom: 6rem; }
+  .metricas { grid-template-columns: repeat(3, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

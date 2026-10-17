@@ -12,6 +12,9 @@ defmodule Trafego.Plataforma.Simulada do
   @doc "Injeta divergencia: altera campos da campanha por fora do executor."
   def injetar(id, attrs), do: Agent.update(__MODULE__, fn s -> %{s | campanhas: Map.update!(s.campanhas, id, fn c -> Map.merge(c, attrs) end)} end)
 
+  @doc "Metricas que a plataforma devolveria para a campanha (gasto em centavos)."
+  def injetar_metricas(id, m), do: Agent.update(__MODULE__, fn s -> %{s | campanhas: Map.update!(s.campanhas, id, fn c -> Map.put(c, "metricas", m) end)} end)
+
   # ---- contrato
   @impl true
   def validar_credencial(cred),
@@ -50,6 +53,13 @@ defmodule Trafego.Plataforma.Simulada do
         do: {:ok, s.campanhas |> Map.values() |> Enum.filter(fn c -> c["conta_id"] == cred["conta_id"] end) |> Enum.sort_by(fn c -> c["n"] end)},
         else: {:error, :credencial_invalida}
     end)
+  end
+
+  @impl true
+  def metricas(cred, id, _dias) do
+    with {:ok, c} <- Agent.get(__MODULE__, &acha(&1, cred, id)) do
+      {:ok, Map.merge(%{"gasto" => 0, "alcance" => 0, "cliques" => 0, "mensagens_iniciadas" => 0, "resultados" => 0}, c["metricas"] || %{})}
+    end
   end
 
   @impl true
