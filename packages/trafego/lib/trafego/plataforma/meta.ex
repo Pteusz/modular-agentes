@@ -20,11 +20,26 @@ defmodule Trafego.Plataforma.Meta do
     conta = conta_id(conta)
 
     with {:ok, c} <- ver(cred, conta, "id,account_id,account_status,currency", :conta),
-         {:ok, _} <- ver_opcional(cred, cred["pagina_id"], "id,name", :pagina),
-         {:ok, _} <- ver_opcional(cred, cred["instagram_id"], "id,username", :instagram) do
-      {:ok, %{"conta_id" => conta, "moeda" => c["currency"], "conta_status" => c["account_status"]}}
+         {:ok, _} <- pagina(cred),
+         {:ok, ig} <- instagram(cred) do
+      info = %{"conta_id" => conta, "moeda" => c["currency"], "conta_status" => c["account_status"], "instagram" => ig}
+      {:ok, if(ig == "nao_ligado", do: Map.put(info, "avisos", ["instagram_nao_ligado"]), else: info)}
     end
   end
+
+  # pagina e obrigatoria (os criativos saem por ela); Instagram e opcional: ausente ou nao alcancado NAO bloqueia, vira aviso
+  defp pagina(%{"pagina_id" => id} = cred) when id not in [nil, ""], do: ver(cred, id, "id,name", :pagina)
+  defp pagina(_), do: {:error, {:inacessivel, :pagina}}
+
+  defp instagram(%{"instagram_id" => id} = cred) when id not in [nil, ""] do
+    case ver(cred, id, "id,username", :instagram) do
+      {:ok, _} -> {:ok, "ok"}
+      {:error, {:inacessivel, :instagram}} -> {:ok, "nao_ligado"}
+      {:error, _} = e -> e
+    end
+  end
+
+  defp instagram(_), do: {:ok, "ausente"}
 
   @impl true
   def criar_campanha(cred, p) do
@@ -262,8 +277,6 @@ defmodule Trafego.Plataforma.Meta do
     end
   end
 
-  defp ver_opcional(_cred, nil, _f, _q), do: {:ok, nil}
-  defp ver_opcional(cred, id, f, q), do: ver(cred, id, f, q)
 
   defp conta_id("act_" <> _ = c), do: c
   defp conta_id(c), do: "act_" <> to_string(c)

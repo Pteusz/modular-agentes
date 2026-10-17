@@ -223,8 +223,15 @@ defmodule Etapa42Test do
         assert {:error, :token_invalido} = Acesso.cadastrar(ta, %{ok | "token" => "EAAERRADO"})
         assert {:error, {:inacessivel, :pagina}} = Acesso.cadastrar(ta, %{ok | "pagina_id" => "PAGX"})
         assert {:error, {:inacessivel, :conta}} = Acesso.cadastrar(ta, %{ok | "conta_id" => "act_999"})
-        assert {:error, {:inacessivel, :instagram}} = Acesso.cadastrar(ta, %{ok | "instagram_id" => "IGX"})
+        assert {:error, {:inacessivel, :pagina}} = Acesso.cadastrar(ta, Map.delete(ok, "pagina_id"))
         assert Acesso.conta(ta) == nil
+        # Instagram e opcional: nao alcancado ou ausente NAO bloqueia, vira aviso e o id nao fica no registro
+        assert {:ok, "act_111"} = Acesso.cadastrar(ta, %{ok | "instagram_id" => "IGX"})
+        sem_ig = Registro.ler(ta, "trafego_conta")
+        assert sem_ig["avisos"] == ["instagram_nao_ligado"] and not Map.has_key?(sem_ig, "instagram_id")
+        assert {:ok, "act_111"} = Acesso.cadastrar(ta, Map.delete(ok, "instagram_id"))
+        refute Map.has_key?(Registro.ler(ta, "trafego_conta"), "instagram_id")
+        assert {:error, :token_invalido} = Acesso.cadastrar(ta, %{ok | "instagram_id" => "IGX", "token" => "EAAERRADO"})
         assert {:ok, "act_111"} = Acesso.cadastrar(ta, ok)
         for t <- [tb, tc, td], do: assert({:ok, "act_222"} = Acesso.cadastrar(t, %{ok | "conta_id" => "act_222"}))
 
@@ -373,6 +380,19 @@ defmodule Etapa42Test do
     assert {:error, [:resolucao_baixa, :proporcao_fora_do_aceito]} = Criativo.conferir(png(500, 100))
     assert {:error, [:formato_nao_suportado]} = Criativo.conferir(pad("GIF89a"))
     assert {:error, [:arquivo_ilegivel]} = Criativo.conferir(<<137, 80, 78, 71, 13, 10, 26, 10, 1, 2>>)
+
+    # ---- 16. criativo so leva instagram_user_id quando o Instagram foi validado; sem ele usa so a pagina
+    cred = %{"conta_id" => "act_111", "pagina_id" => "PAG1", "token" => "EAAROTACIONADO", "moeda" => "BRL"}
+    params = %{"nome" => "x", "destino" => "site", "objetivo" => "lead", "orcamento_diario" => 5000, "teto_total" => 50_000, "publico" => "p",
+               "janela" => %{"inicio" => "2026-11-01", "fim" => "2026-11-30"}, "pixel" => "998877", "url" => "https://c.com.br",
+               "criativo" => %{"midia" => "a.png", "texto" => "t"}, "criativo_bytes" => png(1080, 1350)}
+    antes = length(posts(msrv))
+    assert {:ok, _} = Trafego.Plataforma.Meta.criar_campanha(cred, params)
+    assert {:ok, _} = Trafego.Plataforma.Meta.criar_campanha(Map.put(cred, "instagram_id", "IG1"), params)
+    specs = for p <- Enum.drop(posts(msrv), antes), String.ends_with?(p.caminho, "/adcreatives"), do: URI.decode_query(p.corpo)["object_story_spec"]
+    assert [sem, com] = specs
+    assert sem =~ "PAG1" and not (sem =~ "instagram_user_id")
+    assert com =~ "PAG1" and com =~ ~s("instagram_user_id":"IG1")
 
     # ---- 15. segredo nunca em log, evento nem estado; a conversa do corretor nao vira evento
     todos = Enum.map_join([ta, tb, tc, td], " ", &tudo/1)

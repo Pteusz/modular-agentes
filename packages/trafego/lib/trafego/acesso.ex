@@ -24,22 +24,25 @@ defmodule Trafego.Acesso do
           _ -> "****"
         end
 
-      c |> Map.take(@campos) |> Map.merge(%{"token" => token, "status" => c["status"] || "ok"})
+      c |> Map.take(@campos) |> Map.merge(%{"token" => token, "status" => c["status"] || "ok"}) |> Map.merge(Map.take(c, ["avisos"]))
     end
   end
 
   @doc """
   Cadastra a credencial do tenant depois de validar na plataforma (Meta: pagina, conta de anuncio e Instagram alcancaveis).
   Entrada: "conta_id", "token" e, conforme a plataforma, "pagina_id" e "instagram_id". O erro da plataforma passa direto
-  (:token_invalido, {:inacessivel, :pagina | :conta | :instagram}, :credencial_invalida).
+  (:token_invalido, {:inacessivel, :pagina | :conta}, :credencial_invalida). Instagram nao bloqueia: nao alcancado/ausente vira aviso "instagram_nao_ligado" no registro.
   """
   def cadastrar(tenant, %{"conta_id" => _, "token" => token} = cred) do
     with {:ok, info} <- Plataforma.adaptador().validar_credencial(cred),
          {:ok, envelope} <- Cifra.cifrar(tenant, token) do
+      # Instagram so fica no registro (e portanto so entra no criativo) quando a plataforma o alcancou
+      cred = if info["instagram"] in ["nao_ligado", "ausente"], do: Map.delete(cred, "instagram_id"), else: cred
+
       registro =
         cred
         |> Map.take(@campos)
-        |> Map.merge(%{"token_cifrado" => envelope, "chave_id" => Cifra.chave_id(envelope), "status" => "ok", "moeda" => info["moeda"]})
+        |> Map.merge(%{"token_cifrado" => envelope, "chave_id" => Cifra.chave_id(envelope), "status" => "ok", "moeda" => info["moeda"], "avisos" => info["avisos"]})
         |> Map.reject(fn {_, v} -> is_nil(v) end)
 
       Registro.gravar(tenant, "trafego_conta", registro)
