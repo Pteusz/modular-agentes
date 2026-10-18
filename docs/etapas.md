@@ -94,6 +94,7 @@ TESTE GERAL 4.3: convite -> senha -> login -> ver campanhas proprias -> QR/estad
 TESTE GERAL 4.4: admin cadastra corretor -> tenant vinculado -> corretor completa pelo convite; desativar bloqueia o agente; excluir apaga dados pessoais; admin nao ve a conversa propria; instancia de uma pessoa funciona sem este pacote.
 
 4.5 Fase 2: ativacao com confirmacao
+- STATUS: implementada na branch etapa-4-5, teste geral (10 testes) e etapas anteriores passando; AGUARDA APROVACAO (sem merge, sem tags). Decisoes aprovadas pelo Mateus: feed = dump .sql da wp_produtos importado para feed_imoveis (esgotado = estado_obra Esgotado/Vendido); cotacao = PTAX do Banco Central; teto_total obrigatorio + maximo por tenant + teto mensal de IA em R$ por corretor. Ativacao real na Meta segue travada.
 - Ativar campanha somente com confirmacao em texto livre; monitor agendado (Oban) compara resultado e meta (meta batida, desvio, dados insuficientes); relatorios com limite de frequencia e resumo; desvio que queima verba pode alertar na hora; ajuste sempre como proposta confirmada.
 - Custo de IA em R$ com cotacao diaria e teto por corretor (aviso e bloqueio); proponha a fonte da cotacao e o teto por campanha (paradas).
 - Feed de imoveis: o Mateus expoe; aqui so a leitura e o status esgotado vira evento do plano propondo pausar.

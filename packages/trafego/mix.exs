@@ -1,16 +1,16 @@
 defmodule PTrafego.MixProject do
   use Mix.Project
-  @version "1.3.0"
+  @version "1.4.0"
 
   # Dev local (NUCLEO_LOCAL=1, posto pelo mix.exs da raiz): path. No cliente: git + sparse + tag, sem override.
   defp nucleo do
     if System.get_env("NUCLEO_LOCAL"),
       do: {:nucleo, path: "../nucleo"},
-      else: {:nucleo, git: System.get_env("NUCLEO_GIT", "https://github.com/Pteusz/modular-agentes.git"), sparse: "packages/nucleo", tag: System.get_env("NUCLEO_TAG", "nucleo-1.2.0")}
+      else: {:nucleo, git: System.get_env("NUCLEO_GIT", "https://github.com/Pteusz/modular-agentes.git"), sparse: "packages/nucleo", tag: System.get_env("NUCLEO_TAG", "nucleo-1.3.0")}
   end
 
-  def project, do: [app: :trafego, version: @version, elixir: "~> 1.19", deps: [nucleo(), {:req, "== 0.7.5"}]]
-  def application, do: [extra_applications: [:logger], env: [
+  def project, do: [app: :trafego, version: @version, elixir: "~> 1.19", deps: [nucleo(), {:req, "== 0.7.5"}, {:oban, "== 2.24.1"}]]
+  def application, do: [extra_applications: [:logger], mod: {Trafego.Application, []}, env: [
         nucleo_pacote: true,
         # Meta: versao da Graph API FIXADA (subir de versao e decisao, nao acidente). Nada de segredo aqui.
         meta: [base_url: "https://graph.facebook.com", versao: "v26.0", special_ad_categories: ["HOUSING"], fuso: "-0300", targeting: %{"geo_locations" => %{"countries" => ["BR"]}}],

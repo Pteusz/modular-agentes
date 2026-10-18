@@ -11,9 +11,9 @@ defmodule Etapa45Test do
 
   @confirma "so pra confirmar se entendi, posso fazer isso mesmo?"
   @pedido "pedido destino site; url https://corretor.com.br/lancamento; pixel 998877; publico casais 30-45 zona sul; " <>
-            "criativo foto1.jpg | Apartamento novo na zona sul; diario R$ 50; teto R$ 500; janela 2026-11-01 2026-11-30; meta 20; custo_max R$ 15"
+            "criativo foto1.jpg | Apartamento novo na zona sul; diario R$ 50; teto R$ 500; janela #{Date.utc_today()} #{Date.add(Date.utc_today(), 30)}; meta 20; custo_max R$ 15"
 
-  @chaves ~w(teto_ia_brl teto_max_centavos preco_brl_por_mil notificar cotacao_fonte feed_fonte ptax_base_url relatorio_horas preco_usd_por_milhao)a
+  @chaves ~w(cotacao_usd_brl teto_ia_brl teto_max_centavos preco_brl_por_mil notificar cotacao_fonte feed_fonte ptax_base_url relatorio_horas preco_usd_por_milhao)a
 
   setup_all do
     Registro.migrar!()
@@ -21,8 +21,6 @@ defmodule Etapa45Test do
     limpar()
     start_supervised!(Simulada)
     salvo = for k <- @chaves, do: {k, Application.fetch_env(:trafego, k)}
-    pid = self()
-    Application.put_env(:trafego, :notificar, fn tenant, texto -> send(pid, {:aviso, tenant, texto}) end)
     Application.put_env(:trafego, :cotacao_fonte, "tp_teste")
     Application.put_env(:trafego, :feed_fonte, "tp_teste")
     Application.put_env(:trafego, :teto_ia_brl, 1000.0)
@@ -32,6 +30,12 @@ defmodule Etapa45Test do
       for {k, v} <- salvo, do: (case v do {:ok, x} -> Application.put_env(:trafego, k, x); :error -> Application.delete_env(:trafego, k) end)
     end)
 
+    :ok
+  end
+
+  setup do
+    pid = self()
+    Application.put_env(:trafego, :notificar, fn tenant, texto -> send(pid, {:aviso, tenant, texto}) end)
     :ok
   end
 
@@ -169,7 +173,7 @@ defmodule Etapa45Test do
 
     # queimando: gasto >= 50% do teto (R$ 250) sem nenhum resultado
     Simulada.injetar_metricas(cid, %{"gasto" => 26_000, "resultados" => 0})
-    agora = ~U[2026-10-20 12:00:00Z]
+    agora = DateTime.utc_now()
     assert [{^pid, :desvio}] = Monitor.rodar(t, agora: agora)
     msgs = avisos() |> Enum.map(&elem(&1, 1))
     assert Enum.any?(msgs, &(&1 =~ ~r/alerta|queim|gast/i and &1 =~ pid))
@@ -198,7 +202,7 @@ defmodule Etapa45Test do
     assert resultados(ta) == ["meta_batida"]
     assert resultados(tb) == ["dados_insuficientes"]
 
-    Monitor.rodar(ta, agora: ~U[2026-12-05 12:00:00Z])
+    Monitor.rodar(ta, agora: DateTime.add(DateTime.utc_now(), 60 * 86400))
     assert %{"status" => "encerrada"} = Plano.ler(ta, pa)
     assert %{"status" => "ativa"} = Plano.ler(tb, pb)
     assert Enum.any?(avisos(), fn {tt, x} -> tt == ta and x =~ ~r/final|encerr/i end)
@@ -208,7 +212,7 @@ defmodule Etapa45Test do
     nomes = Trafego.Agendador.crontab() |> Enum.map(fn {_cron, w} -> w end)
     for w <- [Trafego.Workers.Monitor, Trafego.Workers.Cotacao, Trafego.Workers.Feed], do: assert(w in nomes)
     assert Application.get_env(:trafego, :oban_opts)[:testing] == :inline
-    assert :ok = Trafego.Workers.Monitor.perform(%Oban.Job{args: %{}})
+    assert :ok = Trafego.Workers.Monitor.perform(%Oban.Job{args: %{"tenants" => []}})
   end
 
   # ------------------------------------------------------------------------------------------------------------------
@@ -254,6 +258,7 @@ defmodule Etapa45Test do
         else: {200, %{"value" => []}}
     end
 
+    Application.delete_env(:trafego, :cotacao_usd_brl)
     srv = HttpFalso.start(ptax)
     Application.put_env(:trafego, :ptax_base_url, HttpFalso.url(srv))
 
@@ -271,7 +276,7 @@ defmodule Etapa45Test do
 
     # o evento de custo marca a cotacao e a data usadas
     t = "tp5_#{System.unique_integer([:positive])}"
-    Registro.gravar(t, "x", %{})
+    vincular(t)
     Evento.custo(t, nil, "planejador", "planejar", %{"modelo" => "modelo-real-x", "tokens_in" => 1_000_000, "tokens_out" => 0})
     assert [%{dados: %{"cotacao" => 5.05, "cotacao_data" => "2026-10-16"}}] = Registro.eventos(t) |> Enum.filter(&(&1.tipo == "custo_tokens"))
   end
@@ -290,6 +295,16 @@ defmodule Etapa45Test do
     File.write!(arq, @dump)
     on_exit(fn -> File.rm(arq) end)
 
+    # primeiro o imovel 2 ainda a venda: o plano nasce e ativa normalmente
+    arq0 = Path.join(System.tmp_dir!(), "tp5_feed0_#{System.unique_integer([:positive])}.sql")
+    File.write!(arq0, String.replace(@dump, "ESGOTADO", "Lancamento"))
+    on_exit(fn -> File.rm(arq0) end)
+    {:ok, %{esgotados: []}} = Feed.importar(arq0)
+    {t, pid, cid} = montar("; imovel 2")
+    ativar!(t, cid)
+    avisos()
+
+    # depois o dump traz o imovel 2 como ESGOTADO
     {:ok, r} = Feed.importar(arq)
     assert %{importados: 3, esgotados: ["2"]} = r
     assert %{id: "2", nome: "Parque d'Agua", bairro: "Barra", status: "esgotado", valor_centavos: 45_000_050} = Feed.imovel("2")
@@ -299,11 +314,7 @@ defmodule Etapa45Test do
     # reimportar nao duplica
     assert {:ok, %{importados: 3}} = Feed.importar(arq)
 
-    {t, pid, cid} = montar("; imovel 2")
-    ativar!(t, cid)
-    avisos()
-
-    assert :ok = Feed.verificar_planos()
+    assert :ok = Feed.verificar_planos(tenants: [t])
     assert length(evs(t, "imovel_esgotado")) == 1
     # propoe pausar; a campanha segue ATIVA ate confirmar
     assert [%{"tipo" => "pausar", "plano_id" => ^pid, "status" => "aguardando_confirmacao", "motivo" => "imovel_esgotado"}] = Proposta.abertas(t)
@@ -311,7 +322,7 @@ defmodule Etapa45Test do
     assert Enum.any?(avisos(), fn {tt, x} -> tt == t and x =~ ~r/esgotad/i end)
 
     # repetir a verificacao nao duplica evento nem proposta
-    Feed.verificar_planos()
+    Feed.verificar_planos(tenants: [t])
     assert length(evs(t, "imovel_esgotado")) == 1
     assert length(Proposta.abertas(t)) == 1
 
@@ -321,7 +332,7 @@ defmodule Etapa45Test do
 
   test "Meta: ativar fica travado ate a liberacao explicita (nao ha ativacao real sem o Mateus)" do
     srv = HttpFalso.start(fn _ -> {200, %{"success" => true}} end)
-    on_exit(fn -> HttpFalso.parar(srv) end)
+    on_exit(fn -> try do HttpFalso.parar(srv) catch :exit, _ -> :ok end end)
     antes = Application.get_env(:trafego, :meta)
     Application.put_env(:trafego, :meta, base_url: HttpFalso.url(srv), versao: "v26.0")
     on_exit(fn -> if antes, do: Application.put_env(:trafego, :meta, antes), else: Application.delete_env(:trafego, :meta) end)

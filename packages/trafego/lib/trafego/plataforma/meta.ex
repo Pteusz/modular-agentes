@@ -13,6 +13,7 @@ defmodule Trafego.Plataforma.Meta do
   alias Trafego.{Config, Criativo}
 
   @pausado "PAUSED"
+  @ativo "ACTIVE"
 
   # ---- contrato
   @impl true
@@ -120,6 +121,23 @@ defmodule Trafego.Plataforma.Meta do
     end
   end
 
+  @doc """
+  Ativa campanha, conjuntos e anuncios (anuncios primeiro, campanha por ultimo). TRAVADO: so com liberacao explicita
+  (config :meta, :permitir_ativacao = true ou env TRAFEGO_ATIVACAO_META=1), que so o Mateus liga. Sem ela nada sai para a Meta.
+  """
+  @impl true
+  def ativar_campanha(cred, id) do
+    if Config.meta(:permitir_ativacao, false) == true or System.get_env("TRAFEGO_ATIVACAO_META") == "1" do
+      with {:ok, c} <- get_da_conta(cred, id),
+           ids = Enum.reverse([id | for(a <- get_in(c, ["adsets", "data"]) || [], x <- [a | get_in(a, ["ads", "data"]) || []], do: x["id"])]),
+           :ok <- postar_todos(cred, ids, %{"status" => "ACTIVE"}) do
+        ler_campanha(cred, id)
+      end
+    else
+      {:error, :ativacao_nao_liberada}
+    end
+  end
+
   # ---- montagem dos objetos (tudo PAUSED)
   defp campanha(_cred, p) do
     %{
@@ -208,7 +226,12 @@ defmodule Trafego.Plataforma.Meta do
 
     %{
       "id" => c["id"], "nome" => c["name"], "conta_id" => "act_" <> to_string(c["account_id"]), "objetivo" => c["objective"],
-      "status" => if(Enum.all?(todos, &(&1["status"] == @pausado)), do: "PAUSADA", else: status(c["status"], todos)),
+      "status" =>
+        cond do
+          Enum.all?(todos, &(&1["status"] == @pausado)) -> "PAUSADA"
+          Enum.all?(todos, &(&1["status"] == @ativo)) -> "ATIVA"
+          true -> status(c["status"], todos)
+        end,
       "destino" => destino_plano(primeiro["destination_type"]), "orcamento_diario" => inteiro(primeiro["daily_budget"]),
       "teto_total" => inteiro(c["spend_cap"]),
       "janela" => %{"inicio" => dia(primeiro["start_time"]), "fim" => dia(primeiro["end_time"])},
@@ -227,8 +250,9 @@ defmodule Trafego.Plataforma.Meta do
   end
 
   defp status(@pausado), do: "PAUSADA"
+  defp status(@ativo), do: "ATIVA"
   defp status(s), do: s
-  defp status(s, todos), do: if(s == @pausado, do: "FILHOS_NAO_PAUSADOS:" <> Enum.map_join(todos, ",", & &1["status"]), else: s)
+  defp status(s, todos), do: if(s in [@pausado, @ativo], do: "FILHOS_COM_STATUS_DIFERENTE:" <> Enum.map_join(todos, ",", & &1["status"]), else: s)
 
   defp inteiro(nil), do: nil
   defp inteiro(n) when is_integer(n), do: n

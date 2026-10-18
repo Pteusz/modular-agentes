@@ -11,7 +11,11 @@ defmodule Nucleo.Automacoes.Trafego do
 
   @impl Nucleo.Automacao
   def contrato,
-    do: %{versao: "1.2", oferece: %{"trafego" => "1.0", "trafego.painel" => "1.0", "trafego.equipe" => "1.0"}, exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}}
+    do: %{
+      versao: "1.3",
+      oferece: %{"trafego" => "1.0", "trafego.painel" => "1.0", "trafego.equipe" => "1.0", "trafego.monitor" => "1.0"},
+      exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}
+    }
 
   @doc "Verificador decidivel: o que a plataforma devolveu bate com o plano. ctx: %{plano, campanha, conta_id}."
   @impl Nucleo.Automacao
@@ -45,9 +49,10 @@ defmodule Nucleo.Automacoes.Trafego do
       %{chave: "trafego_conta", leitura: :ultimo},
       %{chave: "trafego_atual", leitura: :ultimo},
       %{chave: "trafego_seq", leitura: :ultimo},
+      %{chave: "proposta_seq", leitura: :ultimo},
       %{chave: "aprendizado", leitura: :historico}
     ]
 
   @impl Nucleo.Automacao
-  def aprovacao, do: [:criar_campanha, :editar_campanha, :pausar_campanha]
+  def aprovacao, do: [:criar_campanha, :editar_campanha, :pausar_campanha, :ativar_campanha]
 end

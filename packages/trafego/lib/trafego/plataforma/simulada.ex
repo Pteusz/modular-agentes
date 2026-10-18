@@ -79,7 +79,25 @@ defmodule Trafego.Plataforma.Simulada do
   end
 
   @impl true
-  def pausar_campanha(cred, id), do: editar_campanha(cred, id, %{"status" => "PAUSADA"})
+  def pausar_campanha(cred, id), do: mudar_status(cred, id, "PAUSADA")
+
+  @impl true
+  def ativar_campanha(cred, id), do: mudar_status(cred, id, "ATIVA")
+
+  # campanha, conjuntos e anuncios mudam juntos (o verificador le os tres)
+  defp mudar_status(cred, id, status) do
+    Agent.get_and_update(__MODULE__, fn s ->
+      case acha(s, cred, id) do
+        {:ok, c} ->
+          conjuntos = for j <- c["conjuntos"] || [], do: %{j | "status" => status, "anuncios" => for(a <- j["anuncios"], do: %{a | "status" => status})}
+          c = %{c | "status" => status, "conjuntos" => conjuntos}
+          {{:ok, c}, %{s | campanhas: Map.put(s.campanhas, id, c)}}
+
+        e ->
+          {e, s}
+      end
+    end)
+  end
 
   defp autoriza?(s, %{"conta_id" => conta, "token" => token}), do: MapSet.member?(s.contas, conta) and conta in Map.get(s.tokens, token, [])
   defp autoriza?(_, _), do: false

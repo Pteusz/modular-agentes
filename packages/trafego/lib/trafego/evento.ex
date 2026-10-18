@@ -16,6 +16,17 @@ defmodule Trafego.Evento do
   end
 
   @doc "custo_tokens a partir do uso devolvido pelo provedor de IA."
-  def custo(tenant, plano_id, papel, ref, %{"modelo" => m, "tokens_in" => ti, "tokens_out" => to}),
-    do: emitir(tenant, "custo_tokens", plano_id, papel, ref, %{"modelo" => m, "tokens_in" => ti, "tokens_out" => to, "custo_brl" => Trafego.Custo.brl(m, ti, to)})
+  def custo(tenant, plano_id, papel, ref, %{"modelo" => m, "tokens_in" => ti, "tokens_out" => to}) do
+    base = %{"modelo" => m, "tokens_in" => ti, "tokens_out" => to, "custo_brl" => Trafego.Custo.brl(m, ti, to)}
+
+    # modelo cobrado em USD: o evento marca a cotacao (R$ por US$ 1) e a data dela
+    extra =
+      case Trafego.Custo.cotacao_usada(m) do
+        {v, nil} -> Map.put(base, "cotacao", v)
+        {v, data} -> Map.merge(base, %{"cotacao" => v, "cotacao_data" => Date.to_iso8601(data)})
+        nil -> base
+      end
+
+    emitir(tenant, "custo_tokens", plano_id, papel, ref, extra)
+  end
 end

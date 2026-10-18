@@ -95,8 +95,10 @@ defmodule Trafego.Plano do
   defp invalidos(p) do
     d = p["orcamento_diario"]
     t = p["teto_total"]
+    maximo = Trafego.Config.teto_max_centavos()
 
     (if is_integer(d) and is_integer(t) and t < d, do: ["teto_menor_que_diario"], else: []) ++
+      (if is_integer(t) and t > maximo, do: ["teto_acima_do_maximo"], else: []) ++
       (case {Date.from_iso8601(get_in(p, ["janela", "inicio"]) || ""), Date.from_iso8601(get_in(p, ["janela", "fim"]) || "")} do
          {{:ok, i}, {:ok, f}} -> if Date.compare(f, i) == :lt, do: ["janela_invalida"], else: []
          {{:ok, _}, _} -> ["janela_invalida"]

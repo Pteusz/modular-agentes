@@ -56,7 +56,7 @@ defmodule Etapa41Test do
     Simulada.registrar_token("SIM-TOKEN-B", [cb])
 
     # contrato Nucleo.Automacao com a versao de contrato MAJOR.MINOR e o mesmo encaixe da Eco
-    assert %{versao: "1.2", oferece: %{"trafego" => "1.0", "trafego.painel" => "1.0", "trafego.equipe" => "1.0"}} = Contrato.contrato()
+    assert %{versao: "1.3", oferece: %{"trafego" => "1.0", "trafego.painel" => "1.0", "trafego.equipe" => "1.0", "trafego.monitor" => "1.0"}} = Contrato.contrato()
     assert :ok = Nucleo.Automacao.compativel(Contrato)
 
     for t <- [ta, tb], do: assert({:ok, :criado} = Vincular.vincular(t, Contrato, Canal.Simulado, %{}))
