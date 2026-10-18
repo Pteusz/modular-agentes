@@ -9,7 +9,7 @@ defmodule Projeto.MixProject do
       app: :projeto,
       version: "0.1.0",
       elixir: "~> 1.19",
-      test_pattern: "etapa[1234]*_test.exs",
+      test_pattern: "etapa[12345]*_test.exs",
       deps: [{:nucleo, path: "packages/nucleo"}, {:eco, path: "packages/eco"}, {:trafego, path: "packages/trafego"}, {:painel_base, path: "packages/painel-base"}, {:gestao_equipe, path: "packages/gestao-equipe"}]
     ]
 

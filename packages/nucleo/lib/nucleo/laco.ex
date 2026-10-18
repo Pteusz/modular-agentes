@@ -18,6 +18,17 @@ defmodule Nucleo.Laco do
 
   def canal(pid), do: GenServer.call(pid, :canal)
 
+  @doc """
+  Aviso proativo do agente ao corretor (nao e resposta a uma mensagem): sai pelo mesmo caminho de `responder/2`, com o prefixo,
+  o teto de envio e o gancho. {:error, :sem_laco} se o laco do tenant nao esta de pe (o chamador registra que nao enviou).
+  """
+  def avisar(tenant, texto) when is_binary(texto) do
+    case Registry.lookup(Nucleo.LacoReg, tenant) do
+      [{pid, _}] -> GenServer.cast(pid, {:avisar, texto})
+      [] -> {:error, :sem_laco}
+    end
+  end
+
   @impl GenServer
   def init({tenant, opts}) do
     Nucleo.Inicializacao.validar(tenant)
@@ -59,6 +70,12 @@ defmodule Nucleo.Laco do
 
   @impl GenServer
   def handle_call(:canal, _, s), do: {:reply, s.ref, s}
+
+  @impl GenServer
+  def handle_cast({:avisar, texto}, s) do
+    responder(s, texto)
+    {:noreply, s}
+  end
 
   @impl GenServer
   def handle_info({:mensagem, _}, %{auto: :inativo} = s), do: {:noreply, s}

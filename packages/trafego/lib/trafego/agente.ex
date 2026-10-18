@@ -7,20 +7,105 @@ defmodule Trafego.Agente do
   ambigua -> repergunta curta; negativa -> recusa. O texto do corretor nao vira evento.
   """
   alias Nucleo.Registro
-  alias Trafego.{Acesso, Aprendizado, Criativo, Evento, Executor, IA, Plano, Verificador}
+  alias Trafego.{Acesso, Aprendizado, Ativacao, Criativo, Evento, Executor, IA, Plano, Proposta, TetoIA, Verificador}
 
   @nome "Nucleo.Automacoes.Trafego"
   @repergunta "so pra confirmar se entendi, posso fazer isso mesmo?"
 
-  @doc "Processa uma mensagem do corretor. {:ok, resposta} | {:error, motivo}"
+  @doc """
+  Processa uma mensagem do corretor. {:ok, resposta} | {:error, motivo}
+  Ordem: plano aguardando confirmacao; proposta aberta (ativar/pausar) lida em texto curto; plano em rascunho; pedido curto de
+  ativar/pausar (vira PROPOSTA); senao plano novo.
+  """
   def processar(tenant, texto) do
     with :ok <- ativo(tenant), :ok <- credencial(tenant) do
-      case Plano.atual(tenant) do
-        %{"status" => "aguardando_confirmacao"} = p -> confirmar(tenant, p, texto)
-        %{"status" => "rascunho"} = p -> planejar(tenant, p, texto, "complemento")
-        nil -> planejar(tenant, Plano.novo(tenant), texto, "novo")
+      plano = Plano.atual(tenant)
+      prop = Proposta.atual(tenant)
+
+      cond do
+        match?(%{"status" => "aguardando_confirmacao"}, plano) -> confirmar(tenant, plano, texto)
+        prop != nil and curto?(texto) -> confirmar_proposta(tenant, prop, texto)
+        match?(%{"status" => "rascunho"}, plano) -> planejar(tenant, plano, texto, "complemento")
+        (tipo = intencao(texto)) != nil -> propor(tenant, tipo)
+        true -> planejar(tenant, Plano.novo(tenant), texto, "novo")
       end
     end
+  end
+
+  # pedido de plano tem varios campos separados por ";" ou e longo: nao e resposta a uma proposta nem pedido de ativar/pausar
+  defp curto?(texto), do: String.length(texto) < 120 and not String.contains?(texto, ";")
+
+  defp intencao(texto) do
+    n = texto |> String.downcase() |> :unicode.characters_to_nfd_binary() |> String.replace(~r/\p{Mn}/u, "")
+
+    cond do
+      not curto?(texto) -> nil
+      Regex.match?(~r/\bativ(a|ar|e|em)\b/, n) -> :ativar
+      Regex.match?(~r/\bpaus(a|ar|e|em)\b/, n) -> :pausar
+      true -> nil
+    end
+  end
+
+  # ---- ativar / pausar: o agente diz o que vai fazer e pergunta; nada muda antes da confirmacao
+  defp propor(tenant, :ativar) do
+    plano = Enum.find(Enum.reverse(Plano.listar(tenant)), &(&1 && &1["status"] in ["verificado", "pausada"]))
+
+    if plano == nil do
+      {:ok, "Nao ha campanha criada e verificada para ativar. Me conta o que quer anunciar que eu monto o plano; nada foi alterado."}
+    else
+      case Ativacao.pre_condicoes(tenant, plano) do
+        [] -> abrir_proposta(tenant, plano, "ativar", %{})
+        motivos -> {:ok, "Nao posso ativar agora: #{Ativacao.explicar(motivos)}. Nada foi alterado."}
+      end
+    end
+  end
+
+  defp propor(tenant, :pausar) do
+    case Enum.find(Enum.reverse(Plano.listar(tenant)), &(&1 && &1["status"] == "ativa")) do
+      nil -> {:ok, "Nao ha campanha ativa para pausar; nada foi alterado."}
+      plano -> abrir_proposta(tenant, plano, "pausar", %{"motivo" => "pedido_do_corretor"})
+    end
+  end
+
+  defp abrir_proposta(tenant, plano, tipo, extra) do
+    prop = Proposta.aberta(tenant, tipo, plano["id"]) || Proposta.criar(tenant, tipo, plano["id"], extra)
+    Evento.emitir(tenant, "plano", plano["id"], "planejador", "proposta_" <> tipo, %{"proposta_id" => prop["id"]})
+    {:ok, Ativacao.texto(prop, plano)}
+  end
+
+  defp confirmar_proposta(tenant, prop, texto) do
+    case IA.chamar(tenant, :pequena, :confirmar, %{"texto" => texto, "plano" => prop["plano_id"], "resumo" => "proposta #{prop["tipo"]}"}) do
+      {:ok, %{"decisao" => d}, uso} ->
+        Evento.custo(tenant, prop["plano_id"], "planejador", "confirmar", uso)
+        decidir_proposta(tenant, prop, d)
+
+      {:error, {:teto_ia, info}} ->
+        {:ok, TetoIA.mensagem(info)}
+
+      {:error, _} ->
+        {:ok, @repergunta}
+    end
+  end
+
+  defp decidir_proposta(tenant, prop, "sim") do
+    Evento.emitir(tenant, "confirmacao", prop["plano_id"], "planejador", "sim", %{"proposta_id" => prop["id"]})
+    Proposta.salvar(tenant, Map.put(prop, "status", "confirmado"))
+
+    case Ativacao.executar(tenant, prop["id"]) do
+      {:ok, texto} -> {:ok, texto}
+      {:error, _} -> {:ok, "Nao consegui executar a proposta #{prop["id"]}; nada foi alterado."}
+    end
+  end
+
+  defp decidir_proposta(tenant, prop, "nao") do
+    Evento.emitir(tenant, "confirmacao", prop["plano_id"], "planejador", "nao", %{"proposta_id" => prop["id"]})
+    Proposta.salvar(tenant, Map.put(prop, "status", "recusada"))
+    {:ok, "Ok, cancelei a proposta #{prop["id"]}; nada foi alterado."}
+  end
+
+  defp decidir_proposta(tenant, prop, _) do
+    Evento.emitir(tenant, "confirmacao", prop["plano_id"], "planejador", "ambigua", %{"proposta_id" => prop["id"]})
+    {:ok, @repergunta}
   end
 
   @doc """
@@ -99,7 +184,7 @@ defmodule Trafego.Agente do
     Plano.definir_atual(tenant, plano["id"])
     Evento.emitir(tenant, "pedido", plano["id"], "planejador", ref)
 
-    case IA.provedor().chamar(:media, :planejar, %{"texto" => texto, "plano" => plano}) do
+    case IA.chamar(tenant, :media, :planejar, %{"texto" => texto, "plano" => plano}) do
       {:ok, %{"plano" => parcial}, uso} ->
         Evento.custo(tenant, plano["id"], "planejador", "planejar", uso)
         {plano, ignorados} = Plano.mesclar(plano, parcial)
@@ -109,6 +194,9 @@ defmodule Trafego.Agente do
 
         plano = Map.put(plano, "atencao", Aprendizado.atencao(tenant, Plano.situacao(plano)))
         concluir_plano(tenant, plano)
+
+      {:error, {:teto_ia, info}} ->
+        {:ok, TetoIA.mensagem(info)}
 
       {:error, e} ->
         Evento.emitir(tenant, "plano", plano["id"], "planejador", "ia_falhou", %{"erro" => inspect(e)})
@@ -133,10 +221,13 @@ defmodule Trafego.Agente do
 
   # ---- confirmacao em texto livre
   defp confirmar(tenant, plano, texto) do
-    case IA.provedor().chamar(:pequena, :confirmar, %{"texto" => texto, "plano" => plano["id"]}) do
+    case IA.chamar(tenant, :pequena, :confirmar, %{"texto" => texto, "plano" => plano["id"]}) do
       {:ok, %{"decisao" => d}, uso} ->
         Evento.custo(tenant, plano["id"], "planejador", "confirmar", uso)
         decidir(tenant, plano, d)
+
+      {:error, {:teto_ia, info}} ->
+        {:ok, TetoIA.mensagem(info)}
 
       {:error, _} ->
         {:ok, @repergunta}
