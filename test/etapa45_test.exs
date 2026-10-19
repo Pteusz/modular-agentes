@@ -290,44 +290,19 @@ defmodule Etapa45Test do
   (3, 'c.jpg', 'Vista; Mar', 'Leblon', 'Zona Sul', '1 dorm', 'Pronto', 0.00, '', '2026-10-03 10:00:00');
   """
 
-  test "feed: importa o dump .sql; esgotado vira evento do plano e PROPOE pausar (nao pausa)" do
+  # 4.6: imovel nao tem status; esgotado/vendido deixou de existir (ver etapa46_test.exs)
+  test "feed: importa o dump .sql (id, nome, bairro, regiao, dormitorios, valor, imagem, data); estado da obra e so informativo" do
     arq = Path.join(System.tmp_dir!(), "tp5_feed_#{System.unique_integer([:positive])}.sql")
     File.write!(arq, @dump)
     on_exit(fn -> File.rm(arq) end)
 
-    # primeiro o imovel 2 ainda a venda: o plano nasce e ativa normalmente
-    arq0 = Path.join(System.tmp_dir!(), "tp5_feed0_#{System.unique_integer([:positive])}.sql")
-    File.write!(arq0, String.replace(@dump, "ESGOTADO", "Lancamento"))
-    on_exit(fn -> File.rm(arq0) end)
-    {:ok, %{esgotados: []}} = Feed.importar(arq0)
-    {t, pid, cid} = montar("; imovel 2")
-    ativar!(t, cid)
-    avisos()
-
-    # depois o dump traz o imovel 2 como ESGOTADO
-    {:ok, r} = Feed.importar(arq)
-    assert %{importados: 3, esgotados: ["2"]} = r
-    assert %{id: "2", nome: "Parque d'Agua", bairro: "Barra", status: "esgotado", valor_centavos: 45_000_050} = Feed.imovel("2")
+    assert {:ok, %{importados: 3}} = Feed.importar(arq)
+    assert %{id: "2", nome: "Parque d'Agua", bairro: "Barra", valor_centavos: 45_000_050, estado_original: "ESGOTADO"} = Feed.imovel("2")
     # valor 0 = sem preco (nunca inventar faixa); dormitorios vazio = nao informado
     assert %{valor_centavos: nil} = Feed.imovel("1")
     assert %{dormitorios: nil} = Feed.imovel("2")
     # reimportar nao duplica
     assert {:ok, %{importados: 3}} = Feed.importar(arq)
-
-    assert :ok = Feed.verificar_planos(tenants: [t])
-    assert length(evs(t, "imovel_esgotado")) == 1
-    # propoe pausar; a campanha segue ATIVA ate confirmar
-    assert [%{"tipo" => "pausar", "plano_id" => ^pid, "status" => "aguardando_confirmacao", "motivo" => "imovel_esgotado"}] = Proposta.abertas(t)
-    assert status(cid)["status"] == "ATIVA"
-    assert Enum.any?(avisos(), fn {tt, x} -> tt == t and x =~ ~r/esgotad/i end)
-
-    # repetir a verificacao nao duplica evento nem proposta
-    Feed.verificar_planos(tenants: [t])
-    assert length(evs(t, "imovel_esgotado")) == 1
-    assert length(Proposta.abertas(t)) == 1
-
-    assert resp(Agente.processar(t, "sim, pode pausar")) =~ ~r/paus/i
-    assert status(cid)["status"] == "PAUSADA"
   end
 
   test "Meta: ativar fica travado ate a liberacao explicita (nao ha ativacao real sem o Mateus)" do

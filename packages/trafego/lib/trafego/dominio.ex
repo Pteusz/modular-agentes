@@ -33,16 +33,15 @@ defmodule Trafego.Ativacao do
   @moduledoc """
   Ativar e pausar campanha, SO a partir de proposta confirmada (passa pelo gancho do dominio). Antes de propor e de novo antes
   de executar, as pre-condicoes decidiveis: plano verificado, teto do plano dentro do maximo da instalacao, janela nao encerrada,
-  credencial ok, imovel nao esgotado, campanha realmente PAUSADA na plataforma. Depois de ativar, le a campanha de volta e confere.
+  credencial ok, campanha realmente PAUSADA na plataforma. Depois de ativar, le a campanha de volta e confere.
   """
-  alias Trafego.{Acesso, Evento, Executor, Feed, Gancho, Plano, Proposta}
+  alias Trafego.{Acesso, Evento, Executor, Gancho, Plano, Proposta}
 
   @motivos %{
     "plano_nao_verificado" => "o plano ainda nao foi criado e verificado",
     "teto_acima_do_maximo" => "o teto total do plano passa do maximo permitido nesta instalacao",
     "janela_encerrada" => "a janela do plano ja acabou",
     "credencial_invalida" => "o acesso a plataforma esta invalido",
-    "imovel_esgotado" => "o imovel do plano esta esgotado",
     "campanha_nao_esta_pausada" => "a campanha nao esta pausada na plataforma",
     "campanha_ilegivel" => "nao consegui ler a campanha na plataforma"
   }
@@ -58,7 +57,6 @@ defmodule Trafego.Ativacao do
         "teto_acima_do_maximo" in Plano.pendencias(plano) && "teto_acima_do_maximo",
         janela_encerrada?(plano, hoje) && "janela_encerrada",
         Acesso.status(tenant) != "ok" && "credencial_invalida",
-        Feed.esgotado?(plano["imovel"]) && "imovel_esgotado",
         (case lido do
            {:ok, %{"status" => "PAUSADA"}} -> false
            {:ok, _} -> "campanha_nao_esta_pausada"
@@ -85,7 +83,6 @@ defmodule Trafego.Ativacao do
   def texto(%{"tipo" => "pausar"} = prop, plano) do
     motivo =
       case prop["motivo"] do
-        "imovel_esgotado" -> "o imovel do plano esgotou"
         "desvio_da_meta" -> "ela esta fora da meta"
         _ -> "voce pediu"
       end

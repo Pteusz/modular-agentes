@@ -16,6 +16,11 @@ defmodule PainelBase.Extensao do
     end
   end
 
+  @doc "Itens extras da navegacao inferior vindos das extensoes (nav/1 opcional: usuario -> [{href, rotulo, chave}])."
+  def nav(usuario) do
+    for {_, mod} <- Application.get_env(:painel_base, :extensoes, []), Code.ensure_loaded?(mod), function_exported?(mod, :nav, 1), item <- mod.nav(usuario), do: item
+  end
+
   @doc "Para onde o usuario vai depois de entrar: a primeira extensao que responder, senao \"/\"."
   def inicio(usuario) do
     Enum.find_value(Application.get_env(:painel_base, :extensoes, []), "/", fn {_, mod} ->

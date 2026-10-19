@@ -8,6 +8,9 @@ defmodule GestaoEquipe.Router do
 
   def init(o), do: o
 
+  @doc "Item extra da navegacao do painel (as telas de corretor ganham o atalho para a gestao)."
+  def nav(usuario), do: if(GestaoEquipe.papel(usuario) in [:dono, :admin], do: [{"/equipe", "Equipe", :equipe}], else: [])
+
   @doc "Para onde o painel manda dono/admin depois do login."
   def inicio(usuario), do: if(GestaoEquipe.papel(usuario) in [:dono, :admin], do: "/equipe")
 
@@ -33,6 +36,8 @@ defmodule GestaoEquipe.Router do
   defp rotear(conn, "GET", ["ia"]), do: ir(conn, :ia)
   defp rotear(conn, "GET", ["alertas"]), do: ir(conn, :alertas)
   defp rotear(conn, "GET", ["auditoria"]), do: ir(conn, :auditoria)
+  defp rotear(conn, "GET", ["minha-conta"]), do: ir(conn, :minha_conta)
+  defp rotear(conn, "POST", ["minha-conta"]), do: ir(conn, :salvar_conta)
   defp rotear(conn, "GET", ["admins"]), do: ir(conn, :admins)
   defp rotear(conn, "POST", ["admins"]), do: ir(conn, :criar_admin)
   defp rotear(conn, _, _), do: conn |> send_resp(404, "Não encontrado") |> halt()

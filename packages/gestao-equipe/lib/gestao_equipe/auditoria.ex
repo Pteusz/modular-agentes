@@ -4,7 +4,7 @@ defmodule GestaoEquipe.Auditoria do
 
   def registrar(ator, acao, alvo, detalhes \\ %{}) do
     q("INSERT INTO ge_auditoria (equipe, ator_usuario_id, ator_nome, acao, alvo, detalhes) VALUES ($1,$2,$3,$4,$5,$6)", [
-      ator.tenant_id,
+      GestaoEquipe.Papeis.equipe(ator),
       ator.id,
       ator.nome,
       acao,

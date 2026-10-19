@@ -30,11 +30,21 @@ defmodule GestaoEquipe do
         not email_ok?(email) -> {:error, {:invalido, :email}}
         Usuarios.por_email(email) != nil -> {:error, {:duplicado, :email}}
         true ->
-          case Usuarios.convidar(email, nome, ator.tenant_id) do
+          # tenant PROPRIO do admin (WhatsApp, campanhas e conversa so dele); a equipe continua a do dono
+          tenant = novo_tenant_admin()
+
+          case Usuarios.convidar(email, nome, tenant) do
             {:ok, u} ->
-              Papeis.definir_admin(u, ator)
-              Auditoria.registrar(ator, "admin.criar", "usuario:#{u.id}")
-              {:ok, u}
+              case vincular(tenant) do
+                :ok ->
+                  Papeis.definir_admin(u, ator, Papeis.equipe(ator))
+                  Auditoria.registrar(ator, "admin.criar", "usuario:#{u.id}", %{"tenant" => tenant})
+                  {:ok, u}
+
+                {:error, _} = e ->
+                  desfazer(tenant, 0)
+                  e
+              end
 
             {:error, :email_invalido} -> {:error, {:invalido, :email}}
             {:error, e} -> {:error, e}
@@ -45,7 +55,27 @@ defmodule GestaoEquipe do
     end
   end
 
-  def admins(ator), do: with(:ok <- permitir(ator), do: Papeis.admins(ator.tenant_id))
+  def admins(ator), do: with(:ok <- permitir(ator), do: Papeis.admins(Papeis.equipe(ator)))
+
+  defp novo_tenant_admin, do: prefixo() <> "a" <> Base.encode16(:crypto.strong_rand_bytes(5), case: :lower)
+
+  @doc """
+  Garante o tenant do proprio dono/admin: vincula o painel e o trafego. Idempotente e so ACRESCENTA: o que ja existe no tenant
+  (estado, eventos, sessao do WhatsApp, vinculos antigos) fica como esta. Serve ao dono ja existente (ex.: `mateus`).
+  """
+  def garantir_tenant(ator), do: with(:ok <- permitir(ator), do: vincular(ator.tenant_id))
+
+  @doc "Conta de anuncios do PROPRIO dono/admin (os corretores usam o cadastro). Valida na plataforma, grava cifrada no tenant dele."
+  def minha_conta(ator, attrs) do
+    c = Map.new(@cred, &{&1, limpar(attrs[&1])})
+
+    with :ok <- permitir(ator),
+         :ok <- if(Enum.any?(@obrigatorios_cred, &(c[&1] == "")), do: {:error, {:invalido, :credencial}}, else: :ok),
+         :ok <- Fonte.validar_credencial(para_fonte(c)),
+         {:ok, _} <- Fonte.cadastrar_conta(ator.tenant_id, para_fonte(c)) do
+      Auditoria.registrar(ator, "conta.cadastrar", ator.tenant_id, %{"campos" => Enum.filter(@cred, &(c[&1] != ""))})
+    end
+  end
 
   # ---------------------------------------------------------------- cadastro
 
@@ -80,7 +110,7 @@ defmodule GestaoEquipe do
   defp inserir(ator, id, tenant, c, env) do
     q(
       "INSERT INTO ge_corretores (id, equipe, tenant_id, nome, sobrenome, usuario, email, numero, filiacao, site, credenciais_cifradas, criado_por) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
-      [id, ator.tenant_id, tenant, c["nome"], c["sobrenome"], c["usuario"], c["email"], c["numero"], c["filiacao"], c["site"], env, ator.id]
+      [id, Papeis.equipe(ator), tenant, c["nome"], c["sobrenome"], c["usuario"], c["email"], c["numero"], c["filiacao"], c["site"], env, ator.id]
     )
 
     :ok
@@ -189,7 +219,7 @@ defmodule GestaoEquipe do
   @doc "O corretor (nao excluido) da equipe do ator. {:ok, corretor} | {:error, :sem_permissao | :nao_encontrado}"
   def corretor(ator, id) do
     with :ok <- permitir(ator), {:ok, c} <- achar(id) do
-      if c.equipe == ator.tenant_id and c.status != "excluido", do: {:ok, c}, else: {:error, :nao_encontrado}
+      if c.equipe == Papeis.equipe(ator) and c.status != "excluido", do: {:ok, c}, else: {:error, :nao_encontrado}
     end
   end
 
@@ -199,7 +229,7 @@ defmodule GestaoEquipe do
   def listar(ator, filtros) do
     with :ok <- permitir(ator) do
       {clausulas, params} =
-        Enum.reduce(@filtros, {["equipe = $1", "status <> 'excluido'"], [ator.tenant_id]}, fn k, {cl, ps} = acc ->
+        Enum.reduce(@filtros, {["equipe = $1", "status <> 'excluido'"], [Papeis.equipe(ator)]}, fn k, {cl, ps} = acc ->
           case limpar(filtros[k]) do
             "" -> acc
             v -> {cl ++ ["lower(#{k}) LIKE '%' || lower($#{length(ps) + 1}) || '%' ESCAPE '\\'"], ps ++ [escapar(v)]}
@@ -222,7 +252,7 @@ defmodule GestaoEquipe do
   @doc "Valores de filiacao ja usados (sem repeticao), para sugerir no cadastro."
   def filiacoes(ator) do
     with :ok <- permitir(ator) do
-      q("SELECT DISTINCT filiacao FROM ge_corretores WHERE equipe=$1 AND status <> 'excluido' AND filiacao IS NOT NULL AND filiacao <> '' ORDER BY 1", [ator.tenant_id]).rows
+      q("SELECT DISTINCT filiacao FROM ge_corretores WHERE equipe=$1 AND status <> 'excluido' AND filiacao IS NOT NULL AND filiacao <> '' ORDER BY 1", [Papeis.equipe(ator)]).rows
       |> List.flatten()
     end
   end
@@ -467,6 +497,6 @@ defmodule GestaoEquipe do
   end
 
   def auditoria(ator, limite \\ 100) do
-    with :ok <- permitir(ator), do: Auditoria.listar(ator.tenant_id, limite)
+    with :ok <- permitir(ator), do: Auditoria.listar(Papeis.equipe(ator), limite)
   end
 end
