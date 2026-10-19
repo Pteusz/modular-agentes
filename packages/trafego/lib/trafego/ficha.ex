@@ -29,7 +29,7 @@ defmodule Trafego.Ficha do
   ("sugeridos": publico e texto do anuncio) so entram onde o corretor nao disse. Devolve {plano, ignorados, %{ambiguidade, sem_teto}}.
   """
   def aplicar(plano, parcial) do
-    {extras, parcial} = Map.split(parcial, ["sugeridos", "ambiguidade", "sem_teto"])
+    {extras, parcial} = Map.split(parcial, ["sugeridos", "ambiguidade", "sem_teto", "sem_numero"])
     sug = extras |> Map.get("sugeridos") |> List.wrap() |> Enum.filter(&(&1 in ~w(publico criativo)))
     {da_ia, do_corretor} = Map.split(parcial, sug)
 
@@ -46,6 +46,8 @@ defmodule Trafego.Ficha do
       end
 
     do_corretor = limpo(do_corretor)
+    {plano, do_corretor} = numero(plano, do_corretor)
+    plano = if extras["sem_numero"] == true, do: sem_numero(plano), else: plano
     da_ia = da_ia |> limpo() |> Map.reject(fn {k, v} -> v == %{} or ja_dito?(plano, k, v) end)
 
     {plano, ign} = Plano.mesclar(plano, do_corretor)
@@ -58,6 +60,79 @@ defmodule Trafego.Ficha do
     plano = if sem_teto, do: perguntar(plano, ["teto_total"]), else: plano
     {plano, ign, %{ambiguidade: texto_ou_nil(extras["ambiguidade"]), sem_teto: sem_teto}}
   end
+
+  # ---- numero de WhatsApp (etapa 5.2.1): so digitos, com +55 e DDD; sem DDD a Iara pergunta o DDD, nunca aceita
+  @doc "Normaliza para so digitos com 55 e DDD: {:ok, \"5511974208400\"} | {:sem_ddd, digitos} | :invalido."
+  def normalizar_numero(raw) do
+    d = raw |> to_string() |> String.replace(~r/\D/, "")
+    d = if String.starts_with?(d, "55") and String.length(d) in [12, 13], do: String.slice(d, 2..-1//1), else: d
+    d = if String.starts_with?(d, "0"), do: String.slice(d, 1..-1//1), else: d
+
+    case String.length(d) do
+      n when n in [10, 11] -> {:ok, "55" <> d}
+      n when n in [8, 9] -> {:sem_ddd, d}
+      _ -> :invalido
+    end
+  end
+
+  @doc "Para mostrar: +55 11 97420-8400."
+  def formatar_numero("55" <> <<ddd::binary-size(2), resto::binary>>) when byte_size(resto) in [8, 9] do
+    {a, b} = String.split_at(resto, byte_size(resto) - 4)
+    "+55 #{ddd} #{a}-#{b}"
+  end
+
+  def formatar_numero(n), do: n
+
+  @doc "Chave de comparacao (DDD + 8 ultimos digitos): ignora o 55 e o nono digito."
+  def chave_numero(n) do
+    d = n |> to_string() |> String.replace(~r/\D/, "")
+    d = if String.starts_with?(d, "55") and String.length(d) in [12, 13], do: String.slice(d, 2..-1//1), else: d
+    if String.length(d) >= 10, do: String.slice(d, 0, 2) <> String.slice(d, -8, 8), else: d
+  end
+
+  defp numero(plano, %{"numero" => raw} = dc) do
+    f = ficha(plano)
+    digitos = String.replace(to_string(raw), ~r/\D/, "")
+
+    # o corretor respondeu so o DDD do numero que ficou sem DDD
+    digitos =
+      if is_binary(f["numero_sem_ddd"]) and String.length(digitos) in [2, 3],
+        do: String.slice(digitos, -2, 2) <> f["numero_sem_ddd"],
+        else: digitos
+
+    case normalizar_numero(digitos) do
+      {:ok, n} ->
+        {plano |> limpar_ficha(~w(numero_sem_ddd numero_invalido sem_numero)) |> Map.put("numero", n), Map.put(dc, "numero", n)}
+
+      {:sem_ddd, d} ->
+        {plano |> Map.delete("numero") |> limpar_ficha(~w(numero_invalido)) |> por_ficha(%{"numero_sem_ddd" => d}), Map.delete(dc, "numero")}
+
+      :invalido ->
+        {plano |> Map.delete("numero") |> limpar_ficha(~w(numero_sem_ddd)) |> por_ficha(%{"numero_invalido" => String.slice(to_string(raw), 0, 20)}), Map.delete(dc, "numero")}
+    end
+  end
+
+  defp numero(plano, dc), do: {plano, dc}
+
+  # o corretor escolheu seguir sem numero: o anuncio usa o WhatsApp ligado a Pagina
+  defp sem_numero(plano), do: plano |> Map.delete("numero") |> limpar_ficha(~w(numero_sem_ddd numero_invalido)) |> por_ficha(%{"sem_numero" => true})
+
+  defp por_ficha(plano, kv), do: put_in(plano, ["ficha"], Map.merge(ficha(plano), kv))
+  defp limpar_ficha(plano, chaves), do: put_in(plano, ["ficha"], Map.drop(ficha(plano), chaves))
+
+  @doc "Marca o plano como parado por erro de execucao (a ficha fica; o corretor so ajusta o que falhou)."
+  def marcar_erro(plano), do: por_ficha(plano, %{"erro_execucao" => true})
+
+  # numero de planos antigos (ex.: \"97420-8400\"): normaliza ou volta a perguntar
+  defp renormalizar(%{"numero" => n} = plano) when n not in [nil, ""] do
+    case normalizar_numero(n) do
+      {:ok, ok} -> Map.put(plano, "numero", ok)
+      {:sem_ddd, d} -> plano |> Map.delete("numero") |> por_ficha(%{"numero_sem_ddd" => d})
+      :invalido -> plano |> Map.delete("numero") |> por_ficha(%{"numero_invalido" => String.slice(to_string(n), 0, 20)})
+    end
+  end
+
+  defp renormalizar(plano), do: plano
 
   defp limpo(m), do: m |> Map.reject(fn {_, v} -> v in [nil, ""] end) |> Map.new(fn {k, v} -> {k, if(is_map(v), do: limpo(v), else: v)} end)
 
@@ -92,6 +167,7 @@ defmodule Trafego.Ficha do
   {:pergunta, plano, itens} com TODOS os itens que faltam numa lista so. `vazio`: o plano ainda nao tem nada.
   """
   def avaliar(tenant, plano) do
+    plano = renormalizar(plano)
     base = completar(plano, tenant)
     itens = nucleo(plano) ++ extras(base)
 
@@ -109,22 +185,41 @@ defmodule Trafego.Ficha do
 
   # exigencias do destino e valores invalidos (o resto tem padrao)
   defp extras(base) do
-    pend = Plano.pendencias(base)
+    pend = base |> Plano.pendencias() |> Enum.reject(&(&1 == "numero" and ficha(base)["sem_numero"] == true))
     Enum.filter(pend, &(&1 in ~w(url pixel numero formulario teto_menor_que_diario teto_acima_do_maximo janela_invalida)))
   end
 
   @doc "Pergunta unica numerada. `repetida`: ja perguntei algo disso antes (muda o tom, nunca a lista)."
-  def perguntas(itens, repetida \\ false) do
-    intro = if repetida, do: "Ainda preciso de:", else: "Pra montar o plano me conta:"
-    lista = itens |> Enum.with_index(1) |> Enum.map_join("\n", fn {i, n} -> "#{n}. #{pedido(i)}" end)
+  def perguntas(itens, repetida \\ false, plano \\ %{}, depois_de_duvida \\ false) do
+    intro =
+      cond do
+        depois_de_duvida -> "Alem disso, me conta:"
+        repetida -> "Ainda preciso de:"
+        true -> "Pra montar o plano me conta:"
+      end
+
+    lista = itens |> Enum.with_index(1) |> Enum.map_join("\n", fn {i, n} -> "#{n}. #{pedido(i, plano)}" end)
     intro <> "\n" <> lista <> "\nPode mandar tudo junto, por texto ou audio."
   end
 
-  def pedido("objetivo"), do: "o que voce quer com o anuncio (vender, gerar contatos, divulgar o lancamento...)"
+  # o numero muda de pergunta conforme o que ja foi dito (sem DDD, ilegivel)
+  def pedido("numero", plano) do
+    f = ficha(plano)
+
+    cond do
+      is_binary(f["numero_sem_ddd"]) -> "o DDD do numero #{f["numero_sem_ddd"]} (so o DDD, ex.: 11)"
+      is_binary(f["numero_invalido"]) -> "o numero do WhatsApp com DDD (nao entendi \"#{f["numero_invalido"]}\")"
+      true -> pedido("numero")
+    end
+  end
+
+  def pedido(item, _plano), do: pedido(item)
+
+  def pedido("objetivo"), do: "o que quer com o anuncio (vender, gerar contatos...)"
   def pedido("imovel"), do: "qual imovel vai anunciar"
   def pedido("orcamento_diario"), do: "quanto quer gastar por dia (em R$)"
-  def pedido("teto_total"), do: "o teto total, o maximo que pode gastar (se nao tiver, eu sugiro um)"
-  def pedido("numero"), do: "o numero do WhatsApp que recebe os contatos"
+  def pedido("teto_total"), do: "o teto total (se nao tiver, eu sugiro)"
+  def pedido("numero"), do: "o numero do WhatsApp que recebe os contatos, com DDD"
   def pedido("url"), do: "o link do site"
   def pedido("pixel"), do: "o pixel (codigo de rastreio do site)"
   def pedido("formulario"), do: "o id do formulario"
@@ -170,7 +265,7 @@ defmodule Trafego.Ficha do
 
   # o numero de WhatsApp que o corretor ja usou em plano anterior vira sugestao
   defp ultimo_numero(tenant) do
-    tenant |> Plano.listar() |> Enum.reverse() |> Enum.find_value(fn p -> p && presente?(p["numero"]) && p["numero"] end)
+    tenant |> Plano.listar() |> Enum.reverse() |> Enum.find_value(fn p -> p && presente?(p["numero"]) && match?({:ok, _}, normalizar_numero(p["numero"])) && elem(normalizar_numero(p["numero"]), 1) end)
   end
 
   defp janela(p) do
@@ -230,7 +325,7 @@ defmodule Trafego.Ficha do
   defp feed(nil), do: nil
 
   defp feed(id) do
-    Feed.imovel(id)
+    Feed.buscar(id)
   rescue
     _ -> nil
   catch
@@ -249,8 +344,22 @@ defmodule Trafego.Ficha do
         limpo = texto |> String.split(~r/(?<=[.!?])\s+/, trim: true) |> Enum.reject(&Regex.match?(@proibidos, &1)) |> Enum.join(" ")
         put_texto(p, if(String.trim(limpo) == "", do: copy_padrao(p), else: limpo), origem(p, "texto") || "iara", true)
 
+      generico?(p, texto) ->
+        put_texto(p, copy_padrao(p), "iara", false)
+
       true ->
         p
+    end
+  end
+
+  # texto sugerido (pela IA) que nao fala do imovel do feed (nome ou bairro) e so um slogan: troca pelo texto com os dados dele
+  defp generico?(p, texto) do
+    with "iara" <- origem(p, "texto"), %{} = im <- feed(p["imovel"]) do
+      t = texto |> String.downcase() |> :unicode.characters_to_nfd_binary() |> String.replace(~r/\p{Mn}/u, "")
+      cita? = fn v -> presente?(v) and String.contains?(t, v |> String.downcase() |> :unicode.characters_to_nfd_binary() |> String.replace(~r/\p{Mn}/u, "")) end
+      not (cita?.(im.nome) or cita?.(im.bairro))
+    else
+      _ -> false
     end
   end
 
@@ -260,18 +369,31 @@ defmodule Trafego.Ficha do
     if reescrita, do: put_in(p, ["ficha"], Map.put(ficha(p), "reescrita", true)), else: p
   end
 
+  # dados do imovel (nome, bairro, dormitorios do feed); nada de promessa: so o que o feed diz
   defp copy_padrao(p) do
+    chamada = chamada_copy(p["destino"])
+
     case feed(p["imovel"]) do
       %{} = im ->
-        dorm = if presente?(im.dormitorios), do: ", #{im.dormitorios} dormitorios", else: ""
+        dorm =
+          cond do
+            not presente?(im.dormitorios) -> ""
+            String.match?(im.dormitorios, ~r/dorm|quarto/i) -> ", #{im.dormitorios}"
+            true -> ", #{im.dormitorios} dormitorios"
+          end
+
         onde = if presente?(im.bairro), do: " em #{im.bairro}", else: ""
-        "#{im.nome}#{dorm}#{onde}. Chame no WhatsApp e agende sua visita."
+        "#{im.nome}#{onde}#{dorm}. #{chamada}"
 
       _ ->
         nome = if presente?(p["imovel"]), do: p["imovel"], else: "nosso empreendimento"
-        "Conheca #{nome}. Chame no WhatsApp e agende sua visita."
+        "Conheca #{nome}. #{chamada}"
     end
   end
+
+  defp chamada_copy("site"), do: "Veja os detalhes e agende sua visita."
+  defp chamada_copy("formulario"), do: "Preencha e agende sua visita."
+  defp chamada_copy(_), do: "Chame no WhatsApp e agende sua visita."
 
   # meta de custo por resultado: padrao da config; resultados = teto / custo (so enquanto for dela)
   defp meta(p) do
@@ -332,7 +454,14 @@ defmodule Trafego.Ficha do
     "Publico: #{p["publico"]}#{sug(p, "publico")}. Destino: #{destino_txt(p)}#{sug(p, "destino")}."
   end
 
-  defp destino_txt(%{"destino" => "whatsapp"} = p), do: "conversa no WhatsApp#{if presente?(p["numero"]), do: " (" <> p["numero"] <> ")", else: ""}"
+  defp destino_txt(%{"destino" => "whatsapp"} = p) do
+    cond do
+      presente?(p["numero"]) -> "conversa no WhatsApp (#{formatar_numero(p["numero"])})"
+      ficha(p)["sem_numero"] == true -> "conversa no WhatsApp da sua Pagina"
+      true -> "conversa no WhatsApp"
+    end
+  end
+
   defp destino_txt(%{"destino" => "site"} = p), do: "site#{if presente?(p["url"]), do: " (" <> p["url"] <> ")", else: ""}"
   defp destino_txt(%{"destino" => "formulario"}), do: "formulario"
   defp destino_txt(_), do: "a definir"
@@ -350,7 +479,7 @@ defmodule Trafego.Ficha do
   defp fechamento(p) do
     criativo = if presente?(get_in(p, ["criativo", "midia"])), do: "", else: " A foto ou o video do anuncio eu peco depois que voce aceitar."
 
-    "Conferi: destino com o que precisa, teto dentro do limite (#{Plano.brl(Config.teto_max_centavos())}) e texto dentro das regras de anuncio de imovel.#{criativo} " <>
+    "Conferi destino, teto (limite #{Plano.brl(Config.teto_max_centavos())}) e as regras de anuncio de imovel.#{criativo} " <>
       "Eu crio tudo PAUSADO; nada vai ao ar. Quer mudar algo? E so falar. Voce confirma?"
   end
 end

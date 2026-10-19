@@ -78,6 +78,7 @@ defmodule Trafego.Agente do
     cond do
       match?(%{"status" => "aguardando_confirmacao"}, plano) -> confirmar(tenant, plano, texto)
       match?(%{"status" => "aguardando_criativo"}, plano) and intencao(texto) == nil -> esperar_criativo(tenant, plano, texto)
+      match?(%{"status" => "erro"}, plano) and intencao(texto) == nil -> retomar(tenant, plano, texto)
       prop != nil and curto?(texto) -> confirmar_proposta(tenant, prop, texto)
       match?(%{"status" => "rascunho"}, plano) -> planejar(tenant, plano, texto, "complemento")
       (tipo = intencao(texto)) != nil -> propor(tenant, tipo)
@@ -153,13 +154,14 @@ defmodule Trafego.Agente do
       %{"status" => "rascunho"} = p -> if Plano.vazio?(p), do: "", else: " " <> pergunta_pendente(tenant, p)
       %{"status" => "aguardando_confirmacao", "id" => id} -> " Sobre o plano #{id}: voce confirma?"
       %{"status" => "aguardando_criativo", "id" => id} -> " Sobre o plano #{id}: falta so a foto ou o video do anuncio."
+      %{"status" => "erro", "id" => id} -> " O plano #{id} parou por erro: me diz o que ajustar que eu tento de novo."
       _ -> ""
     end
   end
 
   defp pergunta_pendente(tenant, plano) do
     case Ficha.avaliar(tenant, plano) do
-      {:pergunta, _, itens} -> Ficha.perguntas(itens, true)
+      {:pergunta, p, itens} -> Ficha.perguntas(itens, true, p)
       _ -> ""
     end
   end
@@ -213,8 +215,7 @@ defmodule Trafego.Agente do
     if primeiro, do: Iara.atualizar(tenant, %{"apresentada" => true})
     if perguntar, do: Iara.atualizar(tenant, %{"horario_estado" => "perguntado"})
 
-    lista = List.update_at(lista, 0, &Iara.compor(&1, primeiro: primeiro))
-    {:ok, if(perguntar, do: List.update_at(lista, -1, &Iara.compor(&1, pergunta_horario: true)), else: lista)}
+    {:ok, (if primeiro, do: Iara.apresentacao_mensagens(), else: []) ++ lista ++ if(perguntar, do: [Iara.pergunta_horario()], else: [])}
   end
 
   defp entregar(tenant, {:ok, base, extra}, texto, origem, opts) when is_binary(base) do
@@ -228,14 +229,17 @@ defmodule Trafego.Agente do
     if primeiro, do: Iara.atualizar(tenant, %{"apresentada" => true})
     if perguntar, do: Iara.atualizar(tenant, %{"horario_estado" => "perguntado"})
 
-    falar_opts = [texto: texto, origem: origem, primeiro: primeiro, pergunta_horario: perguntar, omitir_base: omitir]
-    {:ok, Iara.falar(tenant, base, falar_opts ++ Keyword.take(extra, [:situacao, :dados, :plano_id, :contexto, :fixo, :numeradas]))}
+    # mensagens curtas e separadas: apresentacao (2), a resposta, e a pergunta do horario por ultimo
+    falar_opts = [texto: texto, origem: origem, primeiro: false, pergunta_horario: false, omitir_base: false]
+    corpo = if omitir, do: [], else: [Iara.falar(tenant, base, falar_opts ++ Keyword.take(extra, [:situacao, :dados, :plano_id, :contexto, :fixo, :numeradas]))]
+    msgs = (if primeiro, do: Iara.apresentacao_mensagens(), else: []) ++ corpo ++ if(perguntar, do: [Iara.pergunta_horario()], else: [])
+    {:ok, (case msgs do [um] -> um; varias -> varias end)}
   end
 
   # nada pendente com o corretor (plano, proposta ou audio em duvida)
   defp ocioso?(tenant) do
     plano = Plano.atual(tenant)
-    (plano == nil or plano["status"] not in ["rascunho", "aguardando_confirmacao", "aguardando_criativo"]) and Proposta.atual(tenant) == nil and Memoria.pegar(tenant) == nil
+    (plano == nil or plano["status"] not in ["rascunho", "aguardando_confirmacao", "aguardando_criativo", "erro"]) and Proposta.atual(tenant) == nil and Memoria.pegar(tenant) == nil
   end
 
   # pedido de plano tem varios campos separados por ";" ou e longo: nao e resposta a uma proposta nem pedido de ativar/pausar
@@ -533,9 +537,18 @@ defmodule Trafego.Agente do
     repetida = mesma and ultima["faltando"] == itens
     Iara.atualizar(tenant, %{"ultima_pendencia" => %{"plano_id" => plano["id"], "faltando" => itens}})
 
-    duvida = if extras[:ambiguidade], do: "Fiquei na duvida: #{extras[:ambiguidade]}. Me confirma? ", else: ""
-    base = if itens == [], do: String.trim(duvida), else: duvida <> Ficha.perguntas(itens, repetida)
+    duvida = if extras[:ambiguidade], do: "Fiquei na duvida: #{extras[:ambiguidade]}. Me confirma?"
     perguntou = is_binary(texto) and String.contains?(texto, "?")
+    perguntas = if itens != [], do: Ficha.perguntas(itens, repetida, plano, duvida != nil)
+
+    # duvida e lista saem em mensagens separadas (curtas); so se o corretor fez uma pergunta e a IA responde, vai junto
+    base =
+      cond do
+        itens == [] -> duvida
+        duvida == nil -> perguntas
+        perguntou -> duvida <> "\n" <> perguntas
+        true -> [duvida, perguntas]
+      end
 
     contexto = %{
       "respondendo_pergunta" => perguntou,
@@ -582,8 +595,14 @@ defmodule Trafego.Agente do
         {:ok, TetoIA.mensagem(info)}
 
       {:error, _} ->
-        {:ok, @repergunta}
+        {:ok, repergunta(plano)}
     end
+  end
+
+  defp repergunta(plano) do
+    if Ficha.ficha(plano)["erro_execucao"] == true,
+      do: "O plano #{plano["id"]} parou por causa do erro. Me diz o que ajustar que eu tento de novo, ou fala \"cancela\" que eu descarto.",
+      else: @repergunta
   end
 
   defp decidir(tenant, plano, "sim") do
@@ -607,7 +626,7 @@ defmodule Trafego.Agente do
 
   defp decidir(tenant, plano, _) do
     Evento.emitir(tenant, "confirmacao", plano["id"], "planejador", "ambigua")
-    {:ok, @repergunta}
+    {:ok, repergunta(plano)}
   end
 
   defp executar_plano(tenant, plano) do
@@ -629,8 +648,45 @@ defmodule Trafego.Agente do
            end}
 
       {:error, e} ->
-        Plano.definir_atual(tenant, nil)
-        {:ok, "Nao consegui criar a campanha (#{Executor.motivo(e)}). Nada ficou ativo; registrei o erro para a proxima proposta."}
+        # o plano continua o atual (status erro, ficha preservada): o corretor so ajusta o que falhou, sem repetir tudo
+        {:ok, falha(tenant, plano, e)}
     end
+  end
+
+  # causa real em portugues + o que ficou na Meta + as saidas (mensagens curtas, texto fixo)
+  defp falha(tenant, plano, e) do
+    id = Executor.campanha_parcial(e)
+
+    rascunho =
+      if id,
+        do: "Ficou um rascunho parcial PAUSADO na Meta (campanha #{id}); nao foi ao ar e eu nao apaguei nada.",
+        else: "Nao criei nada na Meta; nada foi ativado."
+
+    saidas =
+      if Executor.numero_nao_vinculado?(e) do
+        vinculados =
+          case Acesso.chamar(tenant, :numeros_vinculados, []) do
+            {:ok, [_ | _] = l} -> " Vinculados na sua Pagina: #{Enum.map_join(l, ", ", &Ficha.formatar_numero/1)}."
+            _ -> ""
+          end
+
+        "Voce pode: 1. vincular o numero a sua Pagina na Meta e me avisar; 2. me passar outro numero ja vinculado.#{vinculados} 3. seguir sem numero (o anuncio abre o WhatsApp ligado a Pagina)."
+      end
+
+    [
+      "Nao consegui criar a campanha: #{Executor.explicar(e)}.",
+      rascunho,
+      saidas,
+      "Seu plano #{plano["id"]} continua guardado: me diz o que ajustar (ex.: o numero) e eu tento de novo."
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  # plano parado por erro de execucao: "tenta de novo" ou um ajuste (ex.: o numero) volta ao plano com a ficha preservada
+  defp retomar(tenant, plano, texto) do
+    plano = plano |> Map.delete("parcial") |> Map.put("status", "aguardando_confirmacao")
+    Plano.salvar(tenant, plano)
+    Evento.emitir(tenant, "plano", plano["id"], "planejador", "retomado_apos_erro")
+    confirmar(tenant, plano, texto)
   end
 end

@@ -77,6 +77,7 @@ defmodule Trafego.IA.Falso do
   defp campo(a, "sugeridos", v), do: Map.put(a, "sugeridos", v |> String.split(~r/[\s,]+/, trim: true))
   defp campo(a, "ambiguidade", v), do: Map.put(a, "ambiguidade", v)
   defp campo(a, "sem_teto", _), do: Map.put(a, "sem_teto", true)
+  defp campo(a, "sem_numero", _), do: Map.put(a, "sem_numero", true)
   defp campo(a, "conta", v), do: Map.put(a, "conta_id", v)
   defp campo(a, "publico", v), do: Map.put(a, "publico", v)
 

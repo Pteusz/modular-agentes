@@ -56,7 +56,9 @@ defmodule Etapa52Test do
 
   defp tenant_pronto, do: (t = "tp52_#{System.unique_integer([:positive])}"; vincular(t); t)
   defp msgs({:ok, r}), do: List.wrap(r)
-  defp dizer(t, texto), do: msgs(Agente.processar_mensagens(t, texto))
+  # a apresentacao do primeiro contato (etapa 5.2.1) e testada na etapa521; aqui sai fora pra olhar o plano
+  defp dizer(t, texto), do: t |> Agente.processar_mensagens(texto) |> msgs() |> sem_abertura()
+  defp sem_abertura(l), do: Enum.reject(l, &(&1 in [Trafego.Iara.pergunta_horario() | Trafego.Iara.apresentacao_mensagens()]))
   defp junto(l), do: Enum.join(l, "\n")
   defp esperar(f, n \\ 60), do: f.() || (n > 0 && (Process.sleep(50); esperar(f, n - 1)))
   defp png(w, h), do: <<137, 80, 78, 71, 13, 10, 26, 10, 13::32, "IHDR", w::32, h::32, 8, 2, 0, 0, 0, 0::32>> <> :binary.copy(<<0>>, 3000)
@@ -144,7 +146,7 @@ defmodule Etapa52Test do
     assert Plano.listar(t) |> Enum.all?(&(&1["campanha_id"] in [nil, ""]))
 
     # chegou o criativo: executa, campanha PAUSADA
-    [fim] = msgs(Agente.receber_midia_mensagens(t, midia(:image, png(1080, 1080))))
+    [fim] = t |> Agente.receber_midia_mensagens(midia(:image, png(1080, 1080))) |> msgs() |> sem_abertura()
     assert fim =~ "pausada"
     assert %{"campanha_id" => cid} = Plano.listar(t) |> List.last()
     assert Enum.find(Simulada.todas(), &(&1["id"] == cid))["status"] == "PAUSADA"
@@ -165,14 +167,14 @@ defmodule Etapa52Test do
     for f <- ["uma coisa de cada vez", "o resto a gente vê depois", "o resto a gente ve depois", "uma coisa por vez"], do: refute(txt =~ f)
 
     t2 = tenant_pronto()
-    [amb] = dizer(t2, "pedido objetivo vender; imovel Torre Sul; ambiguidade R$ 500 pode ser por dia ou no total")
+    [amb, _perguntas] = dizer(t2, "pedido objetivo vender; imovel Torre Sul; ambiguidade R$ 500 pode ser por dia ou no total")
     assert amb =~ "duvida" and amb =~ "R$ 500" and amb =~ "Me confirma?"
     assert Plano.atual(t2)["orcamento_diario"] == nil
   end
 
   test "audio vale como texto: mesma ficha, mesmo resultado" do
     t = tenant_pronto()
-    l = msgs(Agente.receber_midia_mensagens(t, midia(:audio, @completo, seconds: 6, file_length: 9000)))
+    l = t |> Agente.receber_midia_mensagens(midia(:audio, @completo, seconds: 6, file_length: 9000)) |> msgs() |> sem_abertura()
     assert hd(l) =~ "Montei o plano" and length(l) == 5
     assert %{"status" => "aguardando_confirmacao"} = Plano.atual(t)
   end
@@ -197,7 +199,7 @@ defmodule Etapa52Test do
     assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref2), &(&1 =~ "Voce confirma?")) end)
     env2 = Canal.Simulado.enviadas(ref2)
     assert length(env2) == 3 and Enum.all?(env2, &String.starts_with?(&1, "Iara: "))
-    assert hd(env2) =~ "Montei o plano" and List.last(env2) =~ "Voce confirma?"
+    assert junto(env2) =~ "Montei o plano" and List.last(env2) =~ "Voce confirma?"
     Conexao.encerrar(t2)
   end
 

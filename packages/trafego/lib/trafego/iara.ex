@@ -20,7 +20,14 @@ defmodule Trafego.Iara do
   @apresentacao "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora. Sou uma IA e cuido das suas campanhas de anuncios, do feed de imoveis e do desempenho. Me adapto ao seu jeito e aprendo com o tempo, melhorando a cada campanha."
   @pergunta_horario "Qual o melhor horario para eu te atualizar todo dia sobre as campanhas? Se voce nao disser, uso 9h; da para mudar depois."
 
+  # a apresentacao sai em 2 mensagens curtas (quem sou; que aprendo com o tempo), nunca num bloco so
+  @apresentacao_msgs [
+    "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora. Sou uma IA e cuido das suas campanhas de anuncios, do feed de imoveis e do desempenho.",
+    "Me adapto ao seu jeito e aprendo com o tempo, melhorando a cada campanha."
+  ]
+
   def apresentacao, do: @apresentacao
+  def apresentacao_mensagens, do: @apresentacao_msgs
   def pergunta_horario, do: @pergunta_horario
   def horario_padrao, do: @horario_padrao
 
