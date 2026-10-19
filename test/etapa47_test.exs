@@ -380,9 +380,9 @@ defmodule Etapa47Test do
     assert :ok = GestaoEquipe.minha_conta(admin, %{"token" => ma["token"], "gerenciador_id" => ma["conta_id"], "pagina_id" => ma["pagina_id"]})
   end
 
-  test "versoes: painel-base 1.3.0, trafego 1.7.2 (oferta trafego.painel 1.1) e o painel nao depende do codigo do trafego" do
+  test "versoes: painel-base 1.3.0, trafego 1.8.0 (oferta trafego.painel 1.1) e o painel nao depende do codigo do trafego" do
     assert to_string(Application.spec(:painel_base, :vsn)) == "1.3.0"
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.7.2"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.8.0"
     assert %{versao: "1.5", oferece: %{"trafego.painel" => "1.1"}} = Nucleo.Automacoes.Trafego.contrato()
     fontes = Path.wildcard(Path.join(File.cwd!(), "packages/painel-base/lib/**/*.ex")) |> Enum.map_join(&File.read!/1)
     refute fontes =~ ~r/\bTrafego\.(Acesso|Cifra|Plataforma)/, "o painel-base so fala com o trafego pela Fonte configuravel"

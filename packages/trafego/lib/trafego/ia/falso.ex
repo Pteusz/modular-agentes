@@ -55,6 +55,13 @@ defmodule Trafego.IA.Falso do
     if String.valid?(bytes), do: {:ok, bytes, %{"modelo" => "falso-audio", "segundos" => s}}, else: {:error, :audio_nao_suportado}
   end
 
+  # fala de teste: os bytes sao "FALA:" + o texto (o teste confere o que foi dito); duracao por caracteres
+  @impl true
+  def sintetizar(texto) when is_binary(texto) do
+    n = String.length(texto)
+    {:ok, "FALA:" <> texto, %{"modelo" => "falso-voz", "caracteres" => n, "segundos" => max(ceil(n / 15), 1), "mime" => "audio/ogg; codecs=opus"}}
+  end
+
   defp uso(faixa, e, s),
     do: %{"modelo" => "falso-#{faixa}", "tokens_in" => div(String.length(inspect(e)), 4) + 1, "tokens_out" => div(String.length(inspect(s)), 4) + 1}
 

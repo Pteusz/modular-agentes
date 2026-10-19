@@ -268,7 +268,7 @@ defmodule EtapaAudioTest do
 
     esperar = fn f -> Enum.reduce_while(1..50, false, fn _, _ -> if f.(), do: {:halt, true}, else: (Process.sleep(100); {:cont, false}) end) end
     assert esperar.(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Iara")) end)
-    assert Enum.all?(Canal.Simulado.enviadas(ref), &String.starts_with?(&1, "Iara: "))
+    assert Enum.all?(Canal.Simulado.enviadas(ref), &String.starts_with?(&1, "[Iara] "))
     assert Canal.Simulado.ignoradas(ref) == 1
 
     # o filtro do Amarula ja entrega audio proprio ao laco como midia

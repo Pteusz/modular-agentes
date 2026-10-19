@@ -45,7 +45,8 @@ Antes de pedir confirmacao, a Iara VALIDA o plano e mostra o resultado: (a) exig
 - Agente adicional de planejamento e otimizacao, que usa o que foi aprendido (previsto pelo Mateus para as proximas atualizacoes). Hoje continua um unico agente (A3); o encaixe e o aprendizado por tenant (A7).
 
 ## 6. Decidido e em aberto
-- DECIDIDO (v2): as mensagens saem com o nome dela ("Iara: ...") no lugar do prefixo "[agente] " (WhatsApp e painel); o prefixo vira configuravel por agente, eco continua com o dele.
+- DECIDIDO (v2, ajustado na 5.2.3): as mensagens saem com o nome dela ("[Iara] ...") no lugar do prefixo "[agente] " (WhatsApp e painel; nota de voz nao tem prefixo); o prefixo vira configuravel por agente, eco continua com o dele.
+- DECIDIDO (5.2.3): o numero do WhatsApp do plano e o cadastrado do corretor (nao pergunta); ela fala por audio (OpenAI gpt-4o-mini-tts, voz marin) quando o corretor manda audio, so em falas curtas sem dado; o que conferir fica em texto; "responde em audio"/"so texto" vale dali em diante.
 - DECIDIDO (v2): Iara sugere teto quando o corretor nao tem; apenas texto, sem botoes.
 - DECIDIDO: o corretor nao pode desligar as atualizacoes (so escolher/mudar o horario).
 1. Nome do imovel no plano quando ha varios parecidos no feed (chave e o id; a Iara mostra bairro e dormitorios para o corretor escolher).

@@ -274,7 +274,7 @@ defmodule Etapa43Test do
     sem_criativo = "pedido destino site; url https://c.com.br/x; pixel 1; publico casais; diario R$ 50; teto R$ 500; janela 2026-11-01 2026-11-30; meta 20; custo_max R$ 15"
     Canal.Simulado.injetar(ref, :proprio, sem_criativo)
     assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Montei o plano")) end), "texto do canal chega ao agente de trafego"
-    assert Enum.all?(Canal.Simulado.enviadas(ref), &String.starts_with?(&1, "Iara: "))
+    assert Enum.all?(Canal.Simulado.enviadas(ref), &String.starts_with?(&1, "[Iara] "))
 
     msg = %Amarula.Msg{channel: :teste, type: :media, raw: nil, content: %Amarula.Content.Media{kind: :image, mimetype: "image/png"}}
     Canal.Simulado.injetar_midia(ref, :proprio, msg)

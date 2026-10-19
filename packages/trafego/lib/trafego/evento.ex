@@ -16,8 +16,12 @@ defmodule Trafego.Evento do
   end
 
   @doc "custo_tokens de uma transcricao de audio (segundos, sem tokens): entra na mesma soma do teto de IA."
-  def custo_audio(tenant, papel, ref, %{"modelo" => m, "segundos" => s}) do
-    base = %{"modelo" => m, "segundos" => s, "tokens_in" => 0, "tokens_out" => 0, "custo_brl" => Trafego.Custo.brl_audio(m, s)}
+  def custo_audio(tenant, papel, ref, %{"modelo" => m, "segundos" => s} = uso) do
+    base =
+      Map.merge(
+        %{"modelo" => m, "segundos" => s, "tokens_in" => 0, "tokens_out" => 0, "custo_brl" => Trafego.Custo.brl_audio(m, s)},
+        Map.take(uso, ["caracteres"])
+      )
 
     extra =
       case Trafego.Custo.cotacao_usada(m) do

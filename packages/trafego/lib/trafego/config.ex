@@ -17,6 +17,9 @@ defmodule Trafego.Config do
   @doc "Tabela de precos de transcricao em USD por minuto: %{modelo => preco}."
   def preco_usd_por_minuto, do: Application.get_env(:trafego, :preco_usd_por_minuto, %{})
 
+  @doc "Voz da Iara (TTS): modelo, voz, formato, chars_por_segundo (estimativa de duracao), max_chars, instrucoes."
+  def voz(chave, padrao \\ nil), do: Application.get_env(:trafego, :voz, []) |> Keyword.get(chave, padrao)
+
   def openai_chave, do: System.get_env("OPENAI_API_KEY")
 
   def criativo(chave, padrao \\ nil), do: Application.get_env(:trafego, :criativo, []) |> Keyword.get(chave, padrao)

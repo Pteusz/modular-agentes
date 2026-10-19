@@ -1,6 +1,6 @@
 defmodule PTrafego.MixProject do
   use Mix.Project
-  @version "1.7.2"
+  @version "1.8.0"
 
   # Dev local (NUCLEO_LOCAL=1, posto pelo mix.exs da raiz): path. No cliente: git + sparse + tag, sem override.
   defp nucleo do
@@ -27,7 +27,16 @@ defmodule PTrafego.MixProject do
         # audio do WhatsApp: limites antes de baixar/transcrever (nota de voz tipica: ate ~1 min, < 1 MB)
         audio: [max_segundos: 120, max_bytes: 10_000_000],
         # transcricao: USD por minuto (pagina oficial de precos)
-        preco_usd_por_minuto: %{"gpt-transcribe" => 0.0045},
+        # fala (TTS) tambem em USD por minuto de audio gerado (estimativa; a API de fala nao devolve uso)
+        preco_usd_por_minuto: %{"gpt-transcribe" => 0.0045, "gpt-4o-mini-tts" => 0.015},
+        # voz da Iara (etapa 5.2.3): modelo, voz feminina, opus (nota de voz do WhatsApp) e duracao estimada por caracteres
+        voz: [
+          modelo: "gpt-4o-mini-tts",
+          voz: "marin",
+          formato: "opus",
+          chars_por_segundo: 15,
+                    instrucoes: "Fale em portugues do Brasil, com voz feminina jovem, calorosa e objetiva, tom informal de colega de equipe falando pelo WhatsApp. Ritmo natural e animado, sem exagero, sem sotaque estrangeiro."
+        ],
         preco_usd_por_milhao: %{"gpt-6-luna" => {0.10, 0.50}, "gpt-6-sol" => {2.00, 10.00}},
         criativo: [min_lado: 600, proporcao_min: {9, 16}, proporcao_max: {191, 100}, max_bytes: 30_000_000]
       ]]

@@ -28,6 +28,8 @@ defmodule Nucleo.Canal.Amarula do
   def iniciar(tenant, destino, opts), do: GenServer.start_link(__MODULE__, {tenant, destino, opts})
   @impl Nucleo.Canal
   def enviar_texto(ref, texto), do: GenServer.call(ref, {:enviar, texto}, 30_000)
+  @impl Nucleo.Canal
+  def enviar_audio(ref, bytes, opts), do: GenServer.call(ref, {:enviar_audio, bytes, opts}, 60_000)
 
   @impl GenServer
   def init({tenant, destino, opts}) do
@@ -70,7 +72,21 @@ defmodule Nucleo.Canal.Amarula do
     {:reply, r, s}
   end
 
+  # nota de voz (ptt) ogg/opus: o Amarula nao processa midia, entao passa a duracao e o mime
+  def handle_call({:enviar_audio, bytes, opts}, _from, %{aberto: true, conn: c} = s) do
+    {:ok, jid} = Amarula.Address.to_jid(%{Amarula.own_address(c) | device: 0})
+
+    r =
+      case Amarula.send_media(c, jid, :audio, bytes, ptt: true, seconds: opts[:segundos] || 1, mimetype: opts[:mime] || "audio/ogg; codecs=opus") do
+        {:ok, _} -> :ok
+        other -> {:error, other}
+      end
+
+    {:reply, r, s}
+  end
+
   def handle_call({:enviar, _}, _from, s), do: {:reply, {:error, :desconectado}, s}
+  def handle_call({:enviar_audio, _, _}, _from, s), do: {:reply, {:error, :desconectado}, s}
 
   @impl GenServer
   def handle_info({:amarula, :connection_update, %{qr: qr}}, s) when is_binary(qr) do
