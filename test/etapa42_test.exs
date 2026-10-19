@@ -395,7 +395,16 @@ defmodule Etapa42Test do
     assert Enum.any?(custos, &(&1["modelo"] == "modelo-pequena-x" and perto?(&1["custo_brl"], 0.0075)))
     cot = Application.fetch_env!(:trafego, :cotacao_usd_brl)
     Application.delete_env(:trafego, :cotacao_usd_brl)
+    # isola a cotacao: a PTAX gravada no banco (producao) nao pode entrar neste teste
+    fonte_antes = Application.fetch_env(:trafego, :cotacao_fonte)
+    Application.put_env(:trafego, :cotacao_fonte, "tp_teste42")
     assert Custo.brl("modelo-media-x", 1000, 500) == nil
+
+    case fonte_antes do
+      {:ok, v} -> Application.put_env(:trafego, :cotacao_fonte, v)
+      :error -> Application.delete_env(:trafego, :cotacao_fonte)
+    end
+
     Application.put_env(:trafego, :cotacao_usd_brl, cot)
 
     # ---- 13. OpenAI: modelo por faixa vem de config; chave so no header; nada de conta nem token no corpo
