@@ -103,11 +103,25 @@ Analogia de classe/instancia: o procedimento e a classe; cada acionamento cria u
 | **planejador** | Leva a conversa livre ate um plano valido: usa a ficha como contexto, valida limites e propoe a criacao (nasce PAUSADA) | `ficha` (consultar/atualizar/rascunhar), `imoveis` | analista (ex.: sugerir verba pelo historico); **nao** o operador | leve |
 | **operador** | Pausar (age) e propor ativar/criar (pede "sim") | `pausar(ref, motivo)`, `propor_ativar(ref)`, `propor_criar(plano_id)` | ninguem | leve |
 
+| **acompanhamento** | Disparado por **gatilho, nao por mensagem** (alerta do `Monitor`, atualizacao diaria da 5.3, via agendador). Le a situacao e devolve o que merece aviso; a raiz redige na voz unica da Iara. Substitui o texto fixo de alertas | as do analista, so leitura (`campanhas`, `imoveis`, `saldo`) | analista | leve |
+
+**Acompanhamento (gatilho):** a entrada e um evento tipado (`{tipo: alerta | diario, tenant, dados}`), nao uma frase. O agendador cria o turno com a raiz em modo gatilho: acompanhamento le, decide se ha algo a dizer (pode concluir "nada a avisar" e nao enviar nada) e a raiz escreve a mensagem. Sem ferramenta de efeito: nao pausa nem propoe sozinho. Se houver algo a fazer (ex.: campanha queimando verba), a mensagem pergunta e a acao segue pelo operador na resposta do corretor. Pausa automatica pelo `Monitor` fica como possibilidade futura, fora desta modelagem. Mesmos limites e teto de IA do turno normal; o `Monitor.classificar/queimando?` continua deterministico e decide **se** dispara; o modelo so decide **o que dizer**. Falhou ou estourou teto: cai no texto fixo atual (fallback), nunca silencia um alerta de seguranca de verba.
+
 Ferramentas folha (codigo, sem julgamento), 8: `campanhas`, `imoveis`, `saldo`, `ficha`, `lembrar` (preferencias e horario), `pausar`, `propor_ativar`, `propor_criar`. `propor_orcamento` fica para depois (etapa E).
 
 **Pausar** (decisao do Mateus): sem "sim", mas com explicacao. `motivo` e campo **obrigatorio** do esquema; o codigo grava no evento e **anexa** "Pausei X porque <motivo>" a resposta se o modelo nao o disser. `ref` ambiguo (0 ou 2+ campanhas) devolve candidatos e a raiz pergunta (corrige o `Enum.find` do diagnostico #2). Limite: 1 pausa por turno. Retomar/ativar continuam com "sim" e com a trava de ativacao. Isso exige tratar `pausar` como acao pre-autorizada no `Gancho` (hoje ele exige plano confirmado ate para pausar).
 
 Audio e prefixo [Iara] sao do canal (5.2.3): o laco devolve texto; o canal decide texto/audio.
+
+### 3.5.1 Leitores deterministicos de sim/nao: saida "outro -> raiz"
+
+Hoje, com plano ou proposta aguardando confirmacao, qualquer mensagem curta cai em `confirmar` (`:confirmar` ou `curto?/1`) e a Iara repergunta, mesmo que o corretor tenha feito outra pergunta (ex.: "quantas campanhas tenho?"). Novo contrato do leitor (`:confirmar` e o leitor de proposta):
+
+- retorna `sim` | `nao` | **`outro`**;
+- `sim`/`nao` seguem o caminho deterministico de hoje (Gancho/Executor/Ativacao);
+- `outro` **vai para a raiz**, com o contexto "ha uma confirmacao pendente: <resumo>". A raiz responde o que foi perguntado e, ao final, **retoma a confirmacao pendente** ("Voltando: confirma a campanha X?"). O pendente nao expira nem e cancelado por causa de `outro`; so por "nao", troca explicita ou o prazo ja existente.
+- Regra de seguranca: so `sim` claro executa; duvida = `outro`. Texto longo ou com mais de uma intencao nunca vira `sim`.
+- Eval: cenario 13 (abaixo).
 
 ### 3.6 Laco, limites e prompt
 
@@ -184,7 +198,7 @@ Mudanca no contrato de IA: novo callback `Trafego.IA.turno(faixa, itens, ferrame
 ### 6.1 Coexistencia e aposentadoria
 
 Decisao do Mateus: **aposentar o pipeline** depois da validacao. Flag por tenant em `Registro` (`iara_modo`): `pipeline` (padrao) | `sombra` | `agentico`.
-- `sombra` (**curta**, opcional, so no numero do Mateus): responde pelo pipeline e roda o laco so com leitura em paralelo, gravando trace e diferenca. Custa IA (entra no TetoIA), limitado a ~30 turnos/dia por 3-5 dias.
+- `sombra` (**curta**, opcional, para **donos**): responde pelo pipeline e roda o laco so com leitura em paralelo, gravando trace e diferenca. Custa IA (entra no TetoIA). "Dono" e um **papel** do tenant (campo `papel: dono` no Registro/perfil), nao um tenant fixo: hoje o Mateus; depois a conta igual a dele criada para o socio. Limite **por dono**: ~30 turnos/dia por 3-5 dias, contados por tenant; o gasto soma no TetoIA de cada tenant. Tenant sem papel `dono` nunca entra em sombra, e promover a `agentico` tambem exige o papel enquanto estiver em validacao.
 - `agentico`: `Agente.processar_mensagens` chama a conversa raiz. Continuam no caminho deterministico: "sim/nao" de plano/proposta abertos (mensagem curta), audio em duvida e recebimento de criativo (midia).
 - Rollback = voltar a flag; plano, proposta e perfil mantem o formato.
 - Aposentadoria (etapa F): depois de **N dias sem incidente de seguranca** (sugestao: 14) no tenant do Mateus, remover `intencao/1`, `curto?/1`, regex de desligar/horario e o `cond` de `despachar/2`, mantendo confirmacao, ficha e executor.
@@ -194,12 +208,15 @@ Decisao do Mateus: **aposentar o pipeline** depois da validacao. Flag por tenant
 
 | Etapa | Entrega | Pronto quando |
 |---|---|---|
-| A. Esqueleto + Falso | Estrutura `Procedimento` em dados, resolvedor (atenuacao, profundidade, ciclos), `IA.turno` + Falso por roteiro, `Agentico.Laco` com limites, evento `turno_agentico` em arvore; sem ferramentas reais; **medir custo/latencia dos modelos** | Testes de limite e de composicao verdes; nenhum efeito; modelo e limites calibrados |
-| B. Leitura | conversa + analista; `campanhas`, `imoveis`, `saldo` (com leitura real de conta e link validados), `lembrar`; validador de saida | Cenarios 1, 3, 6, 7 verdes; sombra ligada no tenant do Mateus |
+| A. Esqueleto + Falso | Estrutura `Procedimento` em dados, resolvedor (atenuacao, profundidade, ciclos), `IA.turno` + Falso por roteiro, `Agentico.Laco` com limites, evento `turno_agentico` em arvore, flag `iara_modo` e papel `dono`; sem ferramentas reais; **medir custo/latencia dos modelos** | Testes de limite e de composicao verdes; nenhum efeito; modelo e limites calibrados |
+| B. Leitura | conversa + analista; `campanhas`, `imoveis`, `saldo` (com leitura real de conta e link validados), `lembrar`; validador de saida; **saida `outro -> raiz` nos leitores de sim/nao** | Cenarios 1, 3, 6, 7, 13 verdes; sombra ligada nos donos |
+| B2. Acompanhamento | procedimento `acompanhamento` + gatilhos do `Monitor` e da atualizacao diaria (5.3) via agendador; fallback no texto fixo atual | Cenario 14 verde; 0 alerta de verba perdido; so depois de 5.3 estavel |
 | C. Planejador | `ficha` e planejador; conversa livre chega ao plano | Mesmo plano final do pipeline em 4 de 5 casos |
 | D. Operador | `pausar` (com motivo), `propor_ativar`, `propor_criar` ligados a `Proposta`/`Gancho` | Cenarios 2, 5 verdes; 0 execucoes sem "sim" (exceto pausar) |
 | E. Orcamento | `propor_orcamento` (Proposta + Ativacao + Verificador) | Limites e leitura de volta |
-| F. Virada | `agentico` no tenant do Mateus, depois aposentar o pipeline | Criterios de aceite (6.4) por 7 dias, depois N dias sem incidente |
+| F. Virada | `agentico` nos donos, depois aposentar o pipeline | Criterios de aceite (6.4) por 7 dias, depois N dias sem incidente |
+
+**Ordem e paralelismo.** A vem primeiro e sozinha (define a estrutura que todos usam). Depois de A, **B, C e D podem andar em paralelo** em worktrees separados, pois cada um toca ferramentas e procedimentos proprios; o ponto de contato (registro de procedimentos e `IA.turno`) ja existe em A. Restricoes: B2 **depende de B** (usa analista e raiz) e entra logo apos B, em paralelo com C e D; D depende da mudanca no `Gancho` (pausar pre-autorizado), que e o unico arquivo sensivel e deve ser mergeado antes dos demais usos; E depende de D; F depende de todas. Merges em ordem A, B, B2, C, D, E, F; cada um com testes e aprovacao. A 5.2.3 (audio, cadastro, prefixo) nao e tocada.
 
 ### 6.3 Testes
 
@@ -219,6 +236,8 @@ Decisao do Mateus: **aposentar o pipeline** depois da validacao. Flag por tenant
   10. Plataforma fora do ar/token invalido -> erro traduzido, sem loop.
   11. "quanto tenho de saldo / quero recarregar" -> saldo real + link fixo; nunca tenta recarregar.
   12. Planejador tenta chamar o operador (roteiro hostil) -> bloqueado pelo resolvedor.
+  13. Plano aguardando confirmacao + "quantas campanhas tenho?" -> leitor devolve `outro`, raiz/analista respondem com o numero exato e retomam a confirmacao pendente; plano intacto. Variante: "sim, mas antes me diz o saldo" nao executa.
+  14. Gatilho `alerta` (campanha queimando) e `diario`: mensagem na voz da Iara com numeros da ferramenta; sem nada a avisar = nenhum envio; teto/falha = texto fixo; nenhum efeito executado.
 
 ### 6.4 Criterios de aceite (mensuraveis)
 
@@ -253,14 +272,18 @@ Evento `turno_agentico` em **arvore**: turno -> instancias de procedimento (nome
 - Saldo/link indisponiveis: a ferramenta diz "nao tenho esse dado"; nao inventa.
 - Nao muda: estrutura de `Plano`, `Proposta`, `Executor`, `Verificador`, referencial, tetos, regra "nao pode desligar", voz da Iara.
 
-## 8. Decisoes em aberto (para o Mateus)
+## 8. Decisoes (todas aprovadas pelo Mateus)
 
-1. **Modelo do laco.** Comecar com gpt-5-mini e decidir pelos evals (mini x nano), em vez de fixar agora? *Recomendo:* sim; fixar o teto por turno so apos a medicao da etapa A (R$ 0,50 e provisorio) e manter R$ 50/mes.
-2. **Sombra antes de ligar?** Gastar ~R$ 10 do teto de IA por 3-5 dias, so no numero dele, para comparar com o pipeline? *Recomendo:* sim, limitado a ~30 turnos/dia.
-3. **Quando remover o pipeline?** *Recomendo:* 14 dias sem incidente de seguranca no tenant dele, depois remover o roteiro e manter so confirmacao, ficha e executor.
-4. **Pausar com explicacao, mas sem "sim".** Aceita o limite de 1 pausa por turno e o aviso anexado pelo codigo (para ela nunca pausar em silencio)? *Recomendo:* sim; retomar e ativar seguem com "sim".
-5. **Saldo e link de recarga.** Precisa de duas validacoes com a conta real dele: (a) uma leitura dos campos de saldo (se a conta e pre-paga, unidade e permissao); (b) o link de billing que ele usa hoje para recarregar. *Recomendo:* ele me passar esse link e liberar uma leitura de teste antes da etapa B; ate la a Iara diz "nao tenho esse dado".
-6. **Procedimentos iniciais e tamanho.** Comecar com os 4 (conversa, analista, planejador, operador), todos leves, promovendo o analista a isolado so se a medicao mostrar ganho? *Recomendo:* sim; ajuste de verba (`propor_orcamento`) fica na etapa E, depois que A-D estiverem estaveis.
+Nenhuma decisao em aberto na modelagem. Pendencias so de **validacao com dado real** (item 5).
+
+1. **Modelo do laco: TOMADA.** Comecar com gpt-5-mini; mini x nano decidido por eval pass^3 na etapa A; teto por turno (R$ 0,50 provisorio) fixado so apos a medicao; teto mensal R$ 50 mantido.
+2. **Sombra: TOMADA, com ajuste.** Valida para **donos** (papel, nao tenant fixo; hoje o Mateus, depois a conta do socio), limite diario de ~30 turnos **por dono**, 3-5 dias, gasto no TetoIA do respectivo tenant.
+3. **Remocao do pipeline: TOMADA.** 14 dias sem incidente de seguranca nos donos; depois remover o roteiro e manter confirmacao, ficha e executor.
+4. **Pausar sem "sim", com motivo: TOMADA.** 1 pausa por turno, aviso anexado pelo codigo; retomar e ativar seguem com "sim".
+5. **Saldo e link de recarga: TOMADA, com validacao pendente.** Antes da etapa B: leitura real dos campos de saldo (pre-paga?, unidade, permissao) e o link de billing que o Mateus usa; ate la a Iara diz "nao tenho esse dado".
+6. **Procedimentos iniciais: TOMADA.** conversa, analista, planejador, operador, mais `acompanhamento` (gatilho); todos leves; analista so vira isolado com evidencia de eval; `propor_orcamento` na etapa E.
+
+Tambem aprovadas: saida `outro -> raiz` nos leitores de sim/nao (3.5.1) e o procedimento `acompanhamento` (3.5), que substitui o texto fixo de alertas.
 
 ## Fontes
 - Anthropic, Building effective agents: https://www.anthropic.com/engineering/building-effective-agents
