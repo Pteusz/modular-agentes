@@ -38,8 +38,22 @@ defmodule PainelBase.Formato do
   @doc "SVG do QR a partir do texto que o canal publicou (a classe `qr` marca so este desenho)."
   def qr_svg(texto) when is_binary(texto) do
     case QRCode.create(texto, :medium) |> QRCode.render(:svg) do
-      {:ok, svg} -> {:ok, String.replace(svg, "<svg ", ~s(<svg class="qr" role="img" aria-label="QR para parear o WhatsApp" ), global: false)}
+      {:ok, svg} -> {:ok, com_viewbox(svg)}
       _ -> :erro
     end
+  end
+
+  # O SVG do gerador vem com width/height fixos e sem viewBox: sem viewBox o CSS (largura maxima) recorta o desenho em vez de encolher.
+  defp com_viewbox(svg) do
+    caixa =
+      case Regex.run(~r/<svg[^>]*\swidth="(\d+)"[^>]*\sheight="(\d+)"/, svg) do
+        [_, l, a] -> ~s(viewBox="0 0 #{l} #{a}" )
+        _ -> ""
+      end
+
+    svg
+    |> String.replace(~r/(<svg[^>]*?)\swidth="\d+"/, "\\1", global: false)
+    |> String.replace(~r/(<svg[^>]*?)\sheight="\d+"/, "\\1", global: false)
+    |> String.replace("<svg ", ~s(<svg class="qr" role="img" aria-label="QR para parear o WhatsApp" #{caixa}), global: false)
   end
 end
