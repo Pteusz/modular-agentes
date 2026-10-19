@@ -11,7 +11,29 @@ defmodule Trafego.IA do
 
   @callback chamar(faixa :: :pequena | :media, tarefa :: atom, entrada :: map) :: {:ok, saida :: map, uso :: map} | {:error, term}
 
-  def provedor, do: Application.get_env(:trafego, :provedor_ia, Trafego.IA.Falso)
+  @doc """
+  Provedor em uso. Config explicita (`:trafego, :provedor_ia`) manda: os testes fixam o Falso em config/config.exs, entao o
+  ambiente de producao (OPENAI_API_KEY, TRAFEGO_IA) nunca vaza para a suite. Sem config (producao): `escolher/1`.
+  """
+  def provedor do
+    case Application.fetch_env(:trafego, :provedor_ia) do
+      {:ok, p} -> p
+      :error -> escolher()
+    end
+  end
+
+  @doc "Escolha pelo ambiente: TRAFEGO_IA=falso | openai manda; senao OpenAI quando OPENAI_API_KEY esta definida; senao Falso."
+  def escolher(get_env \\ &System.get_env/1) do
+    modo = get_env.("TRAFEGO_IA") |> to_string() |> String.trim() |> String.downcase()
+    chave = get_env.("OPENAI_API_KEY") |> to_string() |> String.trim()
+
+    cond do
+      modo == "falso" -> Trafego.IA.Falso
+      modo == "openai" -> Trafego.IA.OpenAI
+      chave != "" -> Trafego.IA.OpenAI
+      true -> Trafego.IA.Falso
+    end
+  end
 
   @callback transcrever(bytes :: binary, meta :: %{mime: String.t(), segundos: pos_integer}) :: {:ok, texto :: String.t(), uso :: map} | {:error, term}
 
