@@ -11,4 +11,10 @@ defmodule PainelBase.Fonte do
   def campanha(tenant, id), do: mod().campanha(tenant, id)
   def atividade(tenant), do: mod().atividade(tenant)
   def conta(tenant), do: mod().conta(tenant)
+
+  @doc "Cadastro manual da conta de anuncios (oferta trafego.painel 1.1): valida na plataforma e guarda cifrado. {:ok, _} | {:error, motivo}"
+  def cadastrar_conta(tenant, cred), do: mod().cadastrar_conta(tenant, cred)
+
+  @doc "Remove a conta de anuncios do tenant (nada na plataforma e tocado)."
+  def remover_conta(tenant), do: mod().remover_conta(tenant)
 end

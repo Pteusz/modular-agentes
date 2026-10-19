@@ -44,7 +44,19 @@ defmodule PainelBase.Banco do
             em timestamptz NOT NULL DEFAULT now()
           )
           """,
-          "CREATE INDEX IF NOT EXISTS pb_tentativas_chave ON pb_tentativas (chave, em)"
+          "CREATE INDEX IF NOT EXISTS pb_tentativas_chave ON pb_tentativas (chave, em)",
+          # auditoria das acoes sensiveis do proprio usuario na tela Conta: quem, quando e so NOMES de campos (nunca valores)
+          """
+          CREATE TABLE IF NOT EXISTS pb_auditoria (
+            id bigserial PRIMARY KEY,
+            usuario_id bigint NOT NULL,
+            tenant_id text NOT NULL,
+            acao text NOT NULL,
+            detalhes jsonb NOT NULL DEFAULT '{}'::jsonb,
+            em timestamptz NOT NULL DEFAULT now()
+          )
+          """,
+          "CREATE INDEX IF NOT EXISTS pb_auditoria_usuario ON pb_auditoria (usuario_id, id)"
         ] do
       q(sql)
     end

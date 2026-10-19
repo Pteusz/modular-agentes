@@ -3,7 +3,7 @@ Fonte: etapa-4.txt (INTERFACE). Link/prints do esboco: o Mateus passa.
 
 ## Layout
 - Celular primeiro, PC adaptado. Uma coluna, alvos de toque >= 48 px.
-- Barra inferior. Corretor: Inicio, Campanhas, Agente, Conta. Admin: Painel, Equipe, IA, Alertas.
+- Barra inferior SO no mobile (>= 48rem a navegacao fica no header). Corretor: Inicio, Campanhas, Agente; Conta e Sair no menu do usuario (header). Admin: Painel, Equipe, IA, Alertas.
 - Desktop: barra lateral, conteudo fluido.
 
 ## Cores (contraste minimo 4.5:1)
