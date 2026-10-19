@@ -51,7 +51,7 @@ defmodule Trafego.Plano do
   def mesclar(plano, parcial) do
     {ignorados, parcial} = Map.split(parcial, ["conta_id"])
     parcial = Map.reject(parcial, fn {_, v} -> v in [nil, ""] end)
-    novo = Map.merge(plano, parcial, fn "meta", a, b -> Map.merge(a, b); _, _, b -> b end)
+    novo = Map.merge(plano, parcial, fn k, a, b when k in ["meta", "criativo", "janela"] and is_map(a) and is_map(b) -> Map.merge(a, b); _, _, b -> b end)
 
     novo =
       case novo["destino"] do
@@ -89,7 +89,7 @@ defmodule Trafego.Plano do
   end
 
   @doc "Plano sem nenhum conteudo (so id/status): o corretor ainda nao disse nada util (ex.: um 'oi')."
-  def vazio?(plano), do: Map.drop(plano, ["id", "status", "atencao"]) == %{}
+  def vazio?(plano), do: Map.drop(plano, ["id", "status", "atencao", "ficha"]) == %{}
 
   @doc "Como a Iara chama cada pendencia (o codigo fica no texto: o significado do erro nao depende da fala)."
   def rotulo("destino"), do: "destino (para onde o anuncio leva: site, whatsapp ou formulario)"

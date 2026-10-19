@@ -33,10 +33,11 @@ defmodule PainelBase.Componentes do
   end
 
   attr :texto, :string, required: true
+  attr :prefixo, :string, default: "[agente]"
 
   def fala_agente(assigns) do
     ~H"""
-    <div class="fala"><span class="prefixo">[agente]</span> {@texto}</div>
+    <div class="fala"><span class="prefixo">{@prefixo}</span> {@texto}</div>
     """
   end
 end

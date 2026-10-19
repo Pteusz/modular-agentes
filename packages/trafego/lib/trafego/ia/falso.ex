@@ -73,6 +73,10 @@ defmodule Trafego.IA.Falso do
 
   defp campo(a, "destino", v), do: Map.put(a, "destino", destino(v))
   defp campo(a, k, v) when k in ~w(url pixel numero formulario imovel), do: Map.put(a, k, v)
+  defp campo(a, "objetivo", v), do: Map.put(a, "objetivo", v)
+  defp campo(a, "sugeridos", v), do: Map.put(a, "sugeridos", v |> String.split(~r/[\s,]+/, trim: true))
+  defp campo(a, "ambiguidade", v), do: Map.put(a, "ambiguidade", v)
+  defp campo(a, "sem_teto", _), do: Map.put(a, "sem_teto", true)
   defp campo(a, "conta", v), do: Map.put(a, "conta_id", v)
   defp campo(a, "publico", v), do: Map.put(a, "publico", v)
 
@@ -128,6 +132,7 @@ defmodule Trafego.IA.Falso do
   # ---- confirmar
   @sim ~w(sim pode confirmo confirmado fechado beleza ok claro perfeito vai positivo autorizo)
   @nao ~w(nao cancela cancelar desisto negativo pare)
+  @ajuste ~w(muda mude troca troque altera altere ajusta ajuste aumenta aumente diminui diminua)
   @duvida ["talvez", "nao sei", "depois", "acho", "hmm", "duvida", "esperar"]
 
   defp decisao(texto) do
@@ -145,6 +150,7 @@ defmodule Trafego.IA.Falso do
 
     cond do
       Enum.any?(@duvida, &String.contains?(n, &1)) -> "ambiguo"
+      Enum.any?(palavras, &(&1 in @ajuste)) and not sim? -> "ajuste"
       sim? and not nao? -> "sim"
       nao? and not sim? -> "nao"
       true -> "ambiguo"

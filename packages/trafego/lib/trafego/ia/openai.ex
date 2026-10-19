@@ -8,7 +8,7 @@ defmodule Trafego.IA.OpenAI do
   @behaviour Trafego.IA
   alias Trafego.Config
 
-  @decisoes ~w(sim nao ambiguo)
+  @decisoes ~w(sim nao ajuste ambiguo)
   @destinos ~w(site whatsapp formulario)
 
   @impl true
@@ -89,7 +89,7 @@ defmodule Trafego.IA.OpenAI do
     base(faixa, modelo, "planejar", instrucao_planejar(), planejar_schema(), %{
       "hoje" => Date.utc_today() |> Date.to_iso8601(),
       "pedido_do_corretor" => e["texto"],
-      "plano_atual" => Map.drop(e["plano"] || %{}, ["id", "status", "atencao", "conta_id"]),
+      "plano_atual" => Map.drop(e["plano"] || %{}, ["id", "status", "atencao", "conta_id", "ficha"]),
       "criativo_recebido" => get_in(e, ["plano", "criativo", "midia"])
     })
   end
@@ -197,13 +197,21 @@ defmodule Trafego.IA.OpenAI do
     criativo.midia so pode ser o arquivo ja recebido (campo criativo_recebido); se nao ha arquivo, deixe nulo. criativo.texto e o texto do anuncio.
     janela em datas AAAA-MM-DD (use "hoje" para datas relativas). meta: resultados desejados e custo_max por resultado (centavos).
     Nao existe conta de anuncio no plano: nao pergunte nem informe ids de conta. A campanha sera criada PAUSADA.
+
+    FICHA: extraia de UMA mensagem quantos campos ela trouxer (objetivo, imovel, verba diaria, teto total, janela, destino, publico, criativo, meta), em qualquer ordem e vindo de texto ou de audio transcrito.
+    objetivo: o que ele quer com o anuncio, em poucas palavras (vender, gerar contatos, divulgar lancamento...). imovel: nome ou id do imovel anunciado.
+    Campo que o plano_atual ja tem fica como esta: so mude um campo se o corretor corrigiu AQUELE campo (correcao muda so ele; os outros ficam nulos aqui). Nunca devolva de novo o que ja estava preenchido e nao foi corrigido.
+    Se o corretor disse que nao tem teto ou nao quer definir, sem_teto = true (deixe teto_total nulo). Nao invente verba nem teto.
+    SUGESTOES: se o corretor NAO disse, voce pode sugerir publico (so por regiao e perfil do imovel, sem idade, genero, CEP ou perfil de pessoa: e anuncio de imovel/HOUSING) e criativo.texto
+    (texto do anuncio sem promessa de rentabilidade ou valorizacao, sem discriminar, sem prometer garantia). Tudo que voce sugerir deve ser listado em "sugeridos" ("publico" e/ou "criativo"); o que o corretor disse nunca entra em "sugeridos".
+    Se algo ficou ambiguo (valor que pode ser diario ou total, dois imoveis possiveis...), nao escolha: descreva em "ambiguidade", em uma frase, o que ficou ambiguo, e deixe o campo nulo.
     """
 
   defp instrucao_confirmar,
     do: """
     O corretor respondeu a uma pergunta de confirmacao do plano resumido. Classifique a resposta:
-    "sim" so se for uma autorizacao clara para executar; "nao" se recusou ou mandou cancelar; "ambiguo" em qualquer duvida,
-    condicao, pergunta, pedido de mudanca ou assunto diferente. Na duvida, "ambiguo".
+    "sim" so se for uma autorizacao clara para executar; "nao" se recusou ou mandou cancelar; "ajuste" se pediu para mudar algo do plano
+    (verba, publico, texto do anuncio, janela, meta...) sem recusar o plano; "ambiguo" em qualquer duvida, condicao, pergunta ou assunto diferente. Na duvida, "ambiguo".
     """
 
   defp instrucao_falar,
@@ -216,7 +224,7 @@ defmodule Trafego.IA.OpenAI do
     Se "corretor_fez_uma_pergunta" for true, responda primeiro a pergunta dele em 1 ou 2 frases simples (so sobre campanhas, anuncios e desempenho; fora disso recuse com educacao) e so depois retome o que falta, com outras palavras.
     Se "ultima_coisa_que_voce_pediu" tiver valor igual ao que o texto base pede, e a mesma pendencia: NAO repita a frase anterior, explique rapidinho por que precisa e peca de novo de um jeito diferente.
     Use "o_que_ja_temos_do_plano" so para nao pedir de novo o que ele ja disse; nao liste tudo. Nunca comece duas mensagens seguidas com a mesma frase.
-    Mantenha TODOS os numeros, valores em R$, datas e ids do texto base exatamente como estao. Nunca peca mais de uma coisa por mensagem.
+    Mantenha TODOS os numeros, valores em R$, datas e ids do texto base exatamente como estao. Se o texto base for uma lista numerada de perguntas, mantenha a lista INTEIRA, com a mesma numeracao, em uma unica mensagem (nada de "uma coisa de cada vez" e nada de adiar perguntas).
     """
 
   defp instrucao_horario,
@@ -251,7 +259,8 @@ defmodule Trafego.IA.OpenAI do
     props = %{
       "destino" => %{"type" => ["string", "null"], "enum" => @destinos ++ [nil]},
       "url" => nulo.("string"), "pixel" => nulo.("string"), "numero" => nulo.("string"), "formulario" => nulo.("string"), "imovel" => nulo.("string"),
-      "publico" => nulo.("string"),
+      "publico" => nulo.("string"), "objetivo" => nulo.("string"), "ambiguidade" => nulo.("string"), "sem_teto" => nulo.("boolean"),
+      "sugeridos" => %{"type" => ["array", "null"], "items" => %{"type" => "string", "enum" => ["publico", "criativo"]}},
       "criativo" => obj.(%{"midia" => nulo.("string"), "texto" => nulo.("string")}),
       "orcamento_diario" => nulo.("integer"), "teto_total" => nulo.("integer"),
       "janela" => obj.(%{"inicio" => nulo.("string"), "fim" => nulo.("string")}),

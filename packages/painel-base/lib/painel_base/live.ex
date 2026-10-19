@@ -88,7 +88,7 @@ defmodule PainelBase.AgenteLive do
     <section class="cartao">
       <h2>Plano aguardando</h2>
       <%= if @plano do %>
-        <.fala_agente texto={@plano["resumo"]} />
+        <.fala_agente texto={@plano["resumo"]} prefixo={@plano["prefixo"] || "[agente]"} />
         <p class="aviso atencao"><span class="simbolo" aria-hidden="true">!</span> Para autorizar, responda no WhatsApp. O painel não cria nem ativa nada.</p>
       <% else %>
         <p>Nenhum plano aguardando.</p>

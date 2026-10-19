@@ -37,11 +37,14 @@ defmodule Nucleo.Automacoes.Trafego do
     }
   end
 
+  @doc "Prefixo das mensagens da Iara no WhatsApp e no painel (Nucleo.Laco usa; padrao dos outros agentes: \"[agente] \")."
+  def prefixo, do: "Iara: "
+
   @doc "Conversa do corretor (texto do chat dele consigo mesmo) -> resposta do agente. O laco chama; ver Nucleo.Laco."
-  def conversar(tenant, texto), do: Trafego.Agente.processar(tenant, texto)
+  def conversar(tenant, texto), do: Trafego.Agente.processar_mensagens(tenant, texto)
 
   @doc "Midia que chegou pelo canal (criativo pelo WhatsApp)."
-  def midia(tenant, msg), do: Trafego.Agente.receber_midia(tenant, msg)
+  def midia(tenant, msg), do: Trafego.Agente.receber_midia_mensagens(tenant, msg)
 
   @impl Nucleo.Automacao
   def retencao,

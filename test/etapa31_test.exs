@@ -61,7 +61,7 @@ defmodule Etapa31Test do
     git = "git -c user.email=t@t -c user.name=t"
 
     # monorepo de teste = copia dos pacotes reais; tags por pacote
-    sh(mono, "cp -r #{@raiz}/packages . && sed -i 's/@version \"1.3.0\"/@version \"1.0.0\"/' packages/nucleo/mix.exs && #{git} init -q && git add -A && #{git} commit -qm v1 && git tag nucleo-1.0.0 && git tag eco-1.0.0")
+    sh(mono, "cp -r #{@raiz}/packages . && sed -i 's/@version \"1.4.0\"/@version \"1.0.0\"/' packages/nucleo/mix.exs && #{git} init -q && git add -A && #{git} commit -qm v1 && git tag nucleo-1.0.0 && git tag eco-1.0.0")
     sh(mono, "sed -i 's/@version \"1.0.0\"/@version \"1.0.1\"/' packages/eco/mix.exs && git add -A && #{git} commit -qm eco101 && git tag eco-1.0.1")
 
     File.write!(Path.join(cli, "mix.exs"), """

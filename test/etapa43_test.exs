@@ -273,12 +273,12 @@ defmodule Etapa43Test do
     ref = Laco.canal(pc)
     sem_criativo = "pedido destino site; url https://c.com.br/x; pixel 1; publico casais; diario R$ 50; teto R$ 500; janela 2026-11-01 2026-11-30; meta 20; custo_max R$ 15"
     Canal.Simulado.injetar(ref, :proprio, sem_criativo)
-    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "criativo")) end), "texto do canal chega ao agente de trafego"
-    assert Enum.all?(Canal.Simulado.enviadas(ref), &String.starts_with?(&1, "[agente] "))
+    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Montei o plano")) end), "texto do canal chega ao agente de trafego"
+    assert Enum.all?(Canal.Simulado.enviadas(ref), &String.starts_with?(&1, "Iara: "))
 
     msg = %Amarula.Msg{channel: :teste, type: :media, raw: nil, content: %Amarula.Content.Media{kind: :image, mimetype: "image/png"}}
     Canal.Simulado.injetar_midia(ref, :proprio, msg)
-    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "confirma")) end), "midia entregue pelo canal chegou ao Agente.receber_midia"
+    assert esperar(fn -> get_in(Trafego.Plano.atual(tc) || %{}, ["criativo", "midia"]) != nil end), "midia entregue pelo canal chegou ao Agente.receber_midia"
     assert %{"status" => "aguardando_confirmacao", "criativo" => %{"midia" => arq}} = Trafego.Plano.atual(tc)
     assert File.exists?(Path.join([midia_dir, tc, arq]))
 

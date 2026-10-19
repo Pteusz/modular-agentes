@@ -28,7 +28,7 @@ Dois aneis sobrepostos com um ponto no encaixe, em cobalto; nome "modular agente
 
 ## Regras de UI
 - Estado nunca so por cor: ponto/icone + rotulo.
-- Mensagens do agente em bloco Nevoa com prefixo [agente].
+- Mensagens do agente em bloco Nevoa com prefixo do agente (padrao [agente]; configuravel por agente: a Iara usa "Iara:").
 - O painel mostra o plano; a autorizacao acontece no WhatsApp (nunca um botao "confirmar" no painel).
 - Pagina server-rendered leve (Phoenix LiveView recomendado; confirmar na 4.0). Sem framework JS pesado.
 

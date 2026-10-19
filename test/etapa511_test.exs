@@ -157,10 +157,7 @@ defmodule Etapa511Test do
     t = tenant_pronto()
     primeira = dizer(t, "pedido destino site; url https://corretor.com.br/lancamento")
     refute primeira =~ "Falta so isso pra fechar o plano"
-    assert primeira =~ "pixel"
-    assert_received {:ia, :falar, e1}
-    assert e1["dados"]["faltando"] == "pixel"
-    refute e1["respondendo_pergunta"]
+    assert primeira =~ "pixel" and primeira =~ "1. "
 
     # o corretor pergunta em vez de responder: a entrada da fala leva a pergunta e o que ja foi pedido
     segunda = dizer(t, "mas pra que serve esse pixel?")
@@ -173,10 +170,9 @@ defmodule Etapa511Test do
     assert segunda != primeira
     assert segunda =~ "pixel"
 
-    # respondeu: segue para a proxima pendencia sem marcar como pergunta
-    terceira = dizer(t, "pixel 998877")
-    assert_received {:ia, :falar, e3}
-    refute e3["respondendo_pergunta"]
+    # respondeu tudo: o plano sai (o teto pedido e nao dado vira sugestao)
+    terceira = dizer(t, "pixel 998877; diario R$ 50")
+    assert terceira =~ "Montei o plano"
     assert terceira != segunda
   end
 end
