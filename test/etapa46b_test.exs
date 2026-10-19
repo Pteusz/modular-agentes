@@ -5,6 +5,7 @@
 # privacidade (a conversa de cada um e so dele), desativar/excluir e auditoria mantidos, tenant existente do dono preservado.
 defmodule Etapa46BTest do
   use ExUnit.Case
+  import Phoenix.LiveViewTest, only: [live: 2, render_async: 1]
   import Phoenix.ConnTest
   alias Nucleo.{Canal, Conexao, Registro, Vincular}
   alias Nucleo.Automacoes.PainelBase, as: ContratoPainel
@@ -42,6 +43,8 @@ defmodule Etapa46BTest do
     :ok
   end
 
+  # /campanhas abre a casca na hora e as linhas chegam em segundo plano (5.4): o teste espera o carregamento
+  defp campanhas_html(sessao), do: (assert {:ok, v, _} = live(sessao, "/campanhas"); render_async(v))
   defp limpar do
     # So o que e do teste. Nunca limpar tabela inteira: convites, sessoes e o tenant do Mateus existem aqui.
     Postgrex.query!(Registro, "DELETE FROM ge_corretores WHERE tenant_id LIKE 'tp6\\_%' OR equipe LIKE 'tp6\\_%'", [])
@@ -184,8 +187,8 @@ defmodule Etapa46BTest do
     # a pagina de campanhas lista so as do proprio tenant
     ids_d = for c <- campanhas(md["gerenciador_id"]), do: c["id"]
     ids_a = for c <- campanhas(ma["gerenciador_id"]), do: c["id"]
-    assert get(sd, "/campanhas") |> html_response(200) |> then(fn h -> Enum.all?(ids_a, &(not String.contains?(h, &1))) end)
-    assert get(sa, "/campanhas") |> html_response(200) |> then(fn h -> Enum.all?(ids_d, &(not String.contains?(h, &1))) end)
+    assert campanhas_html(sd) |> then(fn h -> Enum.all?(ids_a, &(not String.contains?(h, &1))) end)
+    assert campanhas_html(sa) |> then(fn h -> Enum.all?(ids_d, &(not String.contains?(h, &1))) end)
 
     # privacidade: nem a gestao nem o outro veem a conversa; ninguem le o token
     for {s, quem} <- [{sd, "ADMIN-222"}, {sa, "DONO-111"}], rota <- ["/", "/agente", "/campanhas", "/equipe", "/equipe/corretores", "/equipe/ia", "/equipe/alertas", "/equipe/auditoria"] do

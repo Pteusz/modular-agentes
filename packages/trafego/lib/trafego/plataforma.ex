@@ -15,9 +15,20 @@ defmodule Trafego.Plataforma do
   @callback listar_campanhas(cred) :: {:ok, [map]} | {:error, term}
   @doc "Numeros de WhatsApp vinculados a Pagina/conta (so digitos, com 55): a Meta so aceita anunciar com numero vinculado. Leitura, nunca cria nada."
   @callback numeros_vinculados(cred) :: {:ok, [String.t()]} | {:error, term}
-  @optional_callbacks numeros_vinculados: 1
+  @doc """
+  Lista + metricas em poucas chamadas (OPCIONAL, painel rapido): as campanhas da conta, cada uma com a chave "metricas" (mesmo mapa de `metricas/3`).
+  Campanha SEM a chave "metricas" = o lote de metricas falhou; o chamador busca uma a uma (caminho antigo). Erro de credencial volta como erro.
+  """
+  @callback listar_campanhas_com_metricas(cred, dias :: pos_integer()) :: {:ok, [map]} | {:error, term}
+  @optional_callbacks numeros_vinculados: 1, listar_campanhas_com_metricas: 2
   @doc "Metricas dos ultimos `dias` dias de UMA campanha da conta: gasto (centavos), alcance, cliques, mensagens_iniciadas, resultados."
   @callback metricas(cred, id :: String.t(), dias :: pos_integer()) :: {:ok, map} | {:error, term}
+
+  @doc "O adaptador em uso sabe listar campanhas com metricas em lote?"
+  def lote? do
+    mod = adaptador()
+    Code.ensure_loaded?(mod) and function_exported?(mod, :listar_campanhas_com_metricas, 2)
+  end
 
   @doc "Adaptador em uso (config :trafego, :plataforma; padrao o simulado)."
   def adaptador do
