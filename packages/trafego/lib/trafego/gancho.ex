@@ -15,4 +15,18 @@ defmodule Trafego.Gancho do
       Registro.config(tenant, %{"aprovado_#{tipo}" => false})
     end
   end
+
+  @doc """
+  Pausa pre-autorizada (sem "sim"): a unica alteracao que nao pede confirmacao, porque pausar so reduz gasto e se desfaz. Passa pelo mesmo
+  Nucleo.Gancho (config `aprovado_pausar_campanha` liberada so durante a chamada). Ativar, retomar, criar e editar seguem exigindo plano/proposta confirmados.
+  """
+  def pausar_autonoma(tenant) do
+    Registro.config(tenant, %{"aprovado_pausar_campanha" => true})
+
+    try do
+      Gancho.intercepta(tenant, {:pausar_campanha, %{"autonoma" => true}}, Nucleo.Automacoes.Trafego.aprovacao())
+    after
+      Registro.config(tenant, %{"aprovado_pausar_campanha" => false})
+    end
+  end
 end

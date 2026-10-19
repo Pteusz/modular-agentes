@@ -41,8 +41,26 @@ defmodule Trafego.IA do
   @callback sintetizar(texto :: String.t()) :: {:ok, bytes :: binary, uso :: map} | {:error, term}
   @optional_callbacks sintetizar: 1
 
+  @doc """
+  Um passo da conversa com ferramentas (laco do modelo, Trafego.Conversa). Entrada neutra de provedor: "instrucao" (sistema),
+  "itens" (historico: %{"papel" => "corretor"|"iara", "texto"} | %{"papel" => "chamadas", "bruto"} | %{"papel" => "resultado", "id", "saida"})
+  e "ferramentas" (%{"nome", "descricao", "parametros" (JSON Schema estrito)}). Saida: %{"texto"} (resposta final) ou
+  %{"chamadas" => [%{"id", "nome", "args"}], "bruto" => opaco, devolvido tal qual no item "chamadas"}. Nenhuma ferramenta recebe conta.
+  """
+  @callback turno(faixa :: :pequena | :media, entrada :: map) :: {:ok, saida :: map, uso :: map} | {:error, term}
+  @optional_callbacks turno: 2
+
   @doc "Chamada com teto: {:ok, saida, uso} | {:error, {:teto_ia, info}} (sem chamar o provedor) | {:error, outro}"
   def chamar(tenant, faixa, tarefa, entrada), do: com_teto(tenant, plano_id(entrada), fn -> provedor().chamar(faixa, tarefa, entrada) end)
+
+  @doc "Passo com ferramentas, com o mesmo teto de custo da IA: {:ok, saida, uso} | {:error, {:teto_ia, info}} | {:error, outro}. Provedor sem `turno` = {:error, :sem_ferramentas}."
+  def turno(tenant, faixa, entrada, plano_id \\ nil) do
+    com_teto(tenant, plano_id, fn ->
+      mod = provedor()
+      Code.ensure_loaded(mod)
+      if function_exported?(mod, :turno, 2), do: mod.turno(faixa, entrada), else: {:error, :sem_ferramentas}
+    end)
+  end
 
   @doc "Transcricao de audio com o mesmo teto de custo da IA: {:ok, texto, uso} | {:error, {:teto_ia, info}} | {:error, outro}. Uso: %{modelo, segundos}."
   def transcrever(tenant, bytes, meta), do: com_teto(tenant, nil, fn -> provedor().transcrever(bytes, meta) end)

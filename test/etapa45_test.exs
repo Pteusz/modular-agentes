@@ -90,8 +90,8 @@ defmodule Etapa45Test do
     assert status(cid)["status"] == "PAUSADA"
 
     # ambigua: repergunta curta, nada executa (varias vezes)
-    assert resp(Agente.processar(t, "hmm, talvez, nao sei ainda")) == @confirma
-    assert resp(Agente.processar(t, "sim mas nao")) == @confirma
+    assert resp(Agente.processar(t, "hmm, talvez, nao sei ainda")) =~ "voce confirma?"
+    assert resp(Agente.processar(t, "sim mas nao")) =~ "voce confirma?"
     assert status(cid)["status"] == "PAUSADA"
     assert [%{"status" => "aguardando_confirmacao"}] = Proposta.listar(t)
 

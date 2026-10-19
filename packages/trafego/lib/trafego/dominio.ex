@@ -101,6 +101,32 @@ defmodule Trafego.Ativacao do
     end
   end
 
+  @doc """
+  Pausa AUTONOMA (a unica sem "sim"): campanha escolhida na conversa, motivo obrigatorio gravado no evento. Passa pelo gancho do dominio,
+  le a campanha de volta e confere; plano ligado a campanha (se houver) vira "pausada". :ok | {:error, motivo}
+  """
+  def pausar_autonoma(tenant, campanha_id, plano, motivo) when is_binary(motivo) and motivo != "" do
+    pid = plano && plano["id"]
+
+    with {:gancho, :ok} <- {:gancho, Gancho.pausar_autonoma(tenant)},
+         {:ok, %{"status" => "PAUSADA"}} <- Acesso.chamar(tenant, :pausar_campanha, [campanha_id]) do
+      if plano, do: Plano.salvar(tenant, Map.put(plano, "status", "pausada"))
+      Evento.emitir(tenant, "operacao", pid, "executor", campanha_id, %{"acao" => "pausar_campanha", "autonoma" => true, "motivo" => String.slice(motivo, 0, 200)})
+      :ok
+    else
+      {:gancho, _} ->
+        {:error, :sem_liberacao}
+
+      {:ok, outro} ->
+        Evento.emitir(tenant, "operacao", pid, "executor", "pausar", %{"erro" => "pausa_nao_confere:#{outro["status"]}", "autonoma" => true})
+        {:error, :pausa_nao_confere}
+
+      {:error, e} ->
+        Evento.emitir(tenant, "operacao", pid, "executor", "pausar", %{"erro" => Executor.motivo(e), "autonoma" => true})
+        {:error, e}
+    end
+  end
+
   defp rodar(tenant, %{"tipo" => "ativar"} = prop, plano) do
     case pre_condicoes(tenant, plano) do
       [] ->

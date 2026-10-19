@@ -24,6 +24,70 @@ defmodule Trafego.IA.OpenAI do
   end
 
   @doc """
+  Passo da conversa com ferramentas (function calling, API Responses, `strict: true`). Sem estado no lado da OpenAI (`store: false`):
+  os itens de raciocinio e de chamada da resposta anterior voltam no `input` (com `reasoning.encrypted_content`) junto das saidas das
+  ferramentas. Uma chamada por vez (`parallel_tool_calls: false`). Nenhuma ferramenta recebe conta: quem executa e o dominio.
+  """
+  @impl true
+  def turno(faixa, %{"instrucao" => instrucao, "itens" => itens, "ferramentas" => ferramentas}) when faixa in [:pequena, :media] do
+    with {:ok, chave} <- chave(),
+         {:ok, modelo} <- modelo(faixa),
+         {:ok, corpo} <- pedir(chave, corpo_turno(faixa, modelo, instrucao, itens, ferramentas)) do
+      extrair_turno(corpo, modelo)
+    end
+  end
+
+  defp corpo_turno(faixa, modelo, instrucao, itens, ferramentas) do
+    %{
+      "model" => modelo, "store" => false, "max_output_tokens" => Config.openai(:max_tokens, 4000),
+      "reasoning" => %{"effort" => Map.get(Config.openai(:esforco, %{}), faixa, "low")},
+      "include" => ["reasoning.encrypted_content"],
+      "parallel_tool_calls" => false,
+      "tool_choice" => "auto",
+      "input" => [%{"role" => "system", "content" => instrucao} | Enum.flat_map(itens, &item_entrada/1)],
+      "tools" => for(f <- ferramentas, do: %{"type" => "function", "name" => f["nome"], "description" => f["descricao"], "parameters" => f["parametros"], "strict" => true})
+    }
+  end
+
+  defp item_entrada(%{"papel" => "corretor", "texto" => t}), do: [%{"role" => "user", "content" => t}]
+  defp item_entrada(%{"papel" => "iara", "texto" => t}), do: [%{"role" => "assistant", "content" => t}]
+  defp item_entrada(%{"papel" => "aviso", "texto" => t}), do: [%{"role" => "user", "content" => t}]
+  defp item_entrada(%{"papel" => "chamadas", "bruto" => itens}) when is_list(itens), do: itens
+  defp item_entrada(%{"papel" => "resultado", "id" => id, "saida" => s}), do: [%{"type" => "function_call_output", "call_id" => id, "output" => s}]
+
+  defp extrair_turno(%{"output" => out, "usage" => %{"input_tokens" => ti, "output_tokens" => to}} = r, modelo) when is_list(out) and is_integer(ti) and is_integer(to) do
+    uso = %{"modelo" => modelo, "tokens_in" => ti, "tokens_out" => to}
+    partes = for %{"type" => "message", "content" => c} <- out, p <- c, do: p
+    chamadas = for %{"type" => "function_call", "name" => n, "call_id" => id} = f <- out, do: %{"id" => id, "nome" => n, "args" => args_json(f["arguments"])}
+
+    cond do
+      Enum.any?(partes, &(&1["type"] == "refusal")) -> {:error, :recusado_pelo_modelo}
+      r["status"] == "incomplete" -> {:error, :resposta_incompleta}
+      chamadas != [] -> {:ok, %{"chamadas" => chamadas, "bruto" => Enum.filter(out, &(&1["type"] in ["reasoning", "function_call"]))}, uso}
+      true -> texto_final(partes, uso)
+    end
+  end
+
+  defp extrair_turno(_, _), do: {:error, :resposta_inesperada}
+
+  defp texto_final(partes, uso) do
+    case for(%{"type" => "output_text", "text" => t} <- partes, is_binary(t), do: t) do
+      [] -> {:error, :resposta_inesperada}
+      textos -> {:ok, %{"texto" => Enum.join(textos, "\n")}, uso}
+    end
+  end
+
+  # argumentos vem como string JSON; invalido = nil (a conversa devolve o erro ao modelo)
+  defp args_json(s) when is_binary(s) do
+    case Jason.decode(s) do
+      {:ok, m} when is_map(m) -> m
+      _ -> nil
+    end
+  end
+
+  defp args_json(_), do: nil
+
+  @doc """
   Transcricao (v1/audio/transcriptions, multipart). Modelo e idioma de config (:openai, :transcricao). Os bytes so existem em memoria.
   Uso devolvido: %{modelo, segundos} (duracao informada pela API quando vem; senao a do WhatsApp).
   """

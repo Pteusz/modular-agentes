@@ -142,6 +142,30 @@ defmodule Etapa42Test do
   # ---------- OpenAI falsa (Responses API)
   defp openai(%{corpo: corpo}) do
     b = Jason.decode!(corpo)
+    if b["tools"], do: openai_turno(b), else: openai_estruturada(b)
+  end
+
+  # 5.3: o turno da conversa (function calling). 1a volta: o modelo chama `planejar` com o texto do corretor; depois da saida da ferramenta, so fecha.
+  defp openai_turno(b) do
+    itens = b["input"]
+    ultimo = List.last(itens)
+    corretor = for %{"role" => "user", "content" => t} <- itens, do: t
+
+    cond do
+      Enum.any?(itens, &(&1["type"] == "function_call_output")) ->
+        {200, %{"id" => "resp_t2", "status" => "completed", "model" => b["model"] <> "-2026-01-01", "usage" => %{"input_tokens" => 1000, "output_tokens" => 500},
+                "output" => [%{"type" => "message", "content" => [%{"type" => "output_text", "text" => "Montei o plano, confere abaixo."}]}]}}
+
+      inspect(List.last(corretor)) =~ "FALHAR-OPENAI" ->
+        {500, %{"error" => %{"message" => "boom"}}}
+
+      true ->
+        {200, %{"id" => "resp_t1", "status" => "completed", "model" => b["model"] <> "-2026-01-01", "usage" => %{"input_tokens" => 1000, "output_tokens" => 500},
+                "output" => [%{"type" => "function_call", "name" => "planejar", "call_id" => "call_p1", "arguments" => Jason.encode!(%{"pedido" => ultimo["content"]})}]}}
+    end
+  end
+
+  defp openai_estruturada(b) do
     nome = get_in(b, ["text", "format", "name"])
     usuario = b["input"] |> List.last() |> Map.fetch!("content") |> Jason.decode!()
 
@@ -221,7 +245,8 @@ defmodule Etapa42Test do
 
   defp resp({:ok, r}), do: r
   defp evs(t, tipo), do: for(%{tipo: ^tipo} = e <- Registro.eventos(t), do: e.dados)
-  defp tudo(t), do: Postgrex.query!(Registro, "SELECT valor::text FROM estado WHERE tenant_id=$1 UNION ALL SELECT dados::text FROM eventos WHERE tenant_id=$1", [t]).rows |> Enum.join(" ")
+  # 5.3: a unica copia do texto do corretor e o historico curto da conversa (conversa_historico: ate 12 itens de 400 caracteres); fora dele nada
+  defp tudo(t), do: Postgrex.query!(Registro, "SELECT valor::text FROM estado WHERE tenant_id=$1 AND chave <> 'conversa_historico' UNION ALL SELECT dados::text FROM eventos WHERE tenant_id=$1", [t]).rows |> Enum.join(" ")
   defp posts(srv), do: Enum.filter(HttpFalso.pedidos(srv), &(&1.metodo == "POST"))
 
   test "meta e openai (servidores falsos): cifra, validacao, campanha pausada, verificador, conta do tenant, custo, criativo, midia", ctx do
@@ -295,7 +320,8 @@ defmodule Etapa42Test do
         assert File.exists?(Path.join([midia, ta, "foto2.png"]))
 
         # ---- 5. confirmacao em texto livre (faixa pequena): ambigua repergunta; clara executa PAUSADO na Meta
-        assert resp(Agente.processar(ta, "hmm, talvez, nao sei")) == @confirma
+        # 5.3: resposta que nao e sim nem nao vai para a conversa, que responde e retoma a confirmacao (nada executa)
+        assert resp(Agente.processar(ta, "hmm, talvez, nao sei")) =~ ~r/voce confirma\?/i
         assert resp(Agente.processar(ta, "ENUM-INVALIDO")) == @confirma
         assert posts(msrv) == []
         r = resp(Agente.processar(ta, "Perfeito, pode fazer sim!"))
@@ -416,7 +442,12 @@ defmodule Etapa42Test do
     # ---- 13. OpenAI: modelo por faixa vem de config; chave so no header; nada de conta nem token no corpo
     op = HttpFalso.pedidos(osrv)
     assert Enum.all?(op, &(&1.caminho == "/v1/responses" and &1.headers["authorization"] == "Bearer " <> @chave_openai))
-    [b1 | _] = for p <- op, do: Jason.decode!(p.corpo)
+    corpos = for p <- op, do: Jason.decode!(p.corpo)
+    # 5.3: o 1o pedido e o turno da conversa (function calling estrito); o plano estruturado vem da ferramenta planejar
+    [t1 | _] = corpos
+    assert %{"model" => "modelo-media-x", "store" => false, "reasoning" => %{"effort" => "low"}, "parallel_tool_calls" => false} = t1
+    assert Enum.all?(t1["tools"], &(&1["strict"] == true and &1["type"] == "function"))
+    b1 = Enum.find(corpos, &(get_in(&1, ["text", "format", "name"]) == "planejar"))
     assert %{"model" => "modelo-media-x", "store" => false, "reasoning" => %{"effort" => "low"}} = b1
     assert %{"type" => "json_schema", "strict" => true, "name" => "planejar"} = get_in(b1, ["text", "format"])
     assert Enum.any?(op, &(Jason.decode!(&1.corpo)["model"] == "modelo-pequena-x"))

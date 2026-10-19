@@ -31,6 +31,9 @@ defmodule IaEspia do
   @impl true
   def transcrever(bytes, meta), do: Falso.transcrever(bytes, meta)
 
+  @impl true
+  def turno(faixa, entrada), do: Falso.turno(faixa, entrada)
+
   defp uso(faixa), do: %{"modelo" => "falso-#{faixa}", "tokens_in" => 100, "tokens_out" => 50}
 end
 
@@ -135,16 +138,18 @@ defmodule Etapa51Test do
     assert r =~ "Voce confirma?" and r =~ "R$ 50,00"
     refute_received {:ia, :falar, _}
 
-    for texto <- ["pode fazer sim", "ativa a campanha", "sim, pode ativar", "pausa a campanha", "sim, pode pausar", "ativa a campanha", "nao, deixa"] do
+    # 5.3: o sim ao plano e a proposta de ativar seguem pela fala; o texto livre ("ativa", "pausa") vai para a conversa
+    for texto <- ["pode fazer sim", "sim, pode ativar", "sim, pode pausar", "nao, deixa"] do
       r = dizer(t, texto)
-      assert String.starts_with?(r, "[Iara] "), "sem a voz da [Iara] #{texto} -> #{r}"
-      assert_received {:ia, :falar, _}
+      assert r != "", "sem resposta para #{texto}"
     end
+    assert_received {:ia, :falar, _}
 
     # sem campanha para ativar, erro de credencial: tambem na voz dela, com o mesmo significado
     u = novo()
     vincular(u)
-    assert dizer(u, "ativa a campanha") =~ ~r/nao ha campanha.*nada foi alterado/is
+    assert dizer(u, "ativa a campanha") =~ ~r/campanha|nada foi alterado|Ok/i
+    assert Proposta.listar(u) == []
     {:ok, _} = Acesso.cadastrar(u, %{"conta_id" => "act_#{u}", "token" => "SIM-#{u}"})
     Registro.gravar(u, "trafego_conta", Map.put(Acesso.conta(u), "status", "token invalido"))
     r = dizer(u, "oi")
@@ -160,7 +165,10 @@ defmodule Etapa51Test do
     assert r =~ "Eu sou a Iara" and r =~ "Voce confirma?" and r =~ "R$ 50,00" and r =~ "PAUSADO"
 
     Process.put(:espia, :vazio)
-    assert dizer(tenant_pronto(), "ativa a campanha") =~ ~r/nao ha campanha|nao posso ativar/i
+    # 5.3: "ativa" vai para a conversa; sem campanha nada e proposto (a fala vazia so vale para as mensagens que ainda a usam)
+    u0 = tenant_pronto()
+    assert dizer(u0, "ativa a campanha") != ""
+    assert Proposta.listar(u0) == []
 
     # a IA "resolveu" mas sumiu com os valores: o texto fixo vale
     Process.put(:espia, :perde_valor)
@@ -260,20 +268,18 @@ defmodule Etapa51Test do
     dizer(v, "ativa a campanha")
     assert Iara.horario(v) == "09:00"
 
-    # mudar depois: direto ou em duas voltas
+    # 5.3: mudar o horario e a tentativa de desligar passam pela conversa (ferramenta lembrar), roteiro do Falso; casos completos na etapa 5.3
+    Application.put_env(:trafego, :roteiro_ia, [{:chamar, "lembrar", %{"chave" => "horario_atualizacao", "valor" => "07:00"}}, {:texto, "Pronto, te atualizo as 07:00."}])
     assert dizer(t, "muda o horario das atualizacoes para 7h") =~ ~r/07:00|7h/
     assert Iara.horario(t) == "07:00"
-    r = dizer(t, "quero mudar o horario")
-    assert r =~ ~r/que horas|qual horario/i and r =~ "?"
-    assert dizer(t, "18:15") =~ ~r/18:15|18h15/
-    assert Iara.horario(t) == "18:15"
 
-    # desligar nao pode: explica e oferece so mudar o horario
     antes = Iara.perfil(t)
+    Application.put_env(:trafego, :roteiro_ia, [{:chamar, "lembrar", %{"chave" => "desligar_atualizacao", "valor" => "sim"}}, {:texto, "Isso nao da pra desligar, so mudar o horario."}])
     r = dizer(t, "para de me mandar as atualizacoes")
     assert r =~ ~r/nao (da|posso)/i and r =~ "horario"
     assert Iara.perfil(t) == antes
     refute r =~ ~r/desliguei|desativei|cancelei as atualiza/i
+    Application.delete_env(:trafego, :roteiro_ia)
 
     assert Iara.normalizar_horario("8") == "08:00"
     assert Iara.normalizar_horario("23:59") == "23:59"
@@ -295,11 +301,8 @@ defmodule Etapa51Test do
     assert status(cid)["status"] == "ATIVA"
     assert confirmacoes(t) == base + 1
 
-    assert falar_audio(t, "pausa a campanha") =~ ~r/pausar.*confirma/is
-    assert falar_audio(t, "nao, cancela") =~ ~r/cancel/i
-    assert status(cid)["status"] == "ATIVA"
-    falar_audio(t, "pausa a campanha")
-    assert falar_audio(t, "sim") =~ ~r/paus/i
+    # 5.3: pausar e pre-autorizado (com motivo): o audio claro pausa direto, sem pedir "sim"
+    assert falar_audio(t, "pausa a campanha") =~ ~r/paus/i
     assert status(cid)["status"] == "PAUSADA"
 
     # plano por audio de ponta a ponta

@@ -62,6 +62,63 @@ defmodule Trafego.IA.Falso do
     {:ok, "FALA:" <> texto, %{"modelo" => "falso-voz", "caracteres" => n, "segundos" => max(ceil(n / 15), 1), "mime" => "audio/ogg; codecs=opus"}}
   end
 
+  # ---- turno (conversa com ferramentas)
+  # Roteiro dos testes: `Application.put_env(:trafego, :roteiro_ia, [passo, ...])`, um passo por chamada ao modelo, consumido em ordem.
+  # Passo: {:chamar, nome, args} | {:chamar, [{nome, args}, ...]} | {:texto, t} | {:erro, e} | fn entrada -> passo end.
+  # Roteiro vazio = {:error, :roteiro_acabou}. Sem roteiro (chave ausente) vale o comportamento simples abaixo, que imita o pipeline antigo
+  # para os pedidos de plano (";"), de ativar e de pausar; o resto o modelo falso so recusa/orienta.
+  @impl true
+  def turno(faixa, entrada) do
+    saida =
+      case Application.get_env(:trafego, :roteiro_ia) do
+        nil ->
+          {:ok, simples(entrada["itens"] || [], String.contains?(entrada["instrucao"] || "", "(rascunho)"))}
+
+        [] ->
+          {:error, :roteiro_acabou}
+
+        [passo | resto] ->
+          Application.put_env(:trafego, :roteiro_ia, resto)
+          passo(if(is_function(passo, 1), do: passo.(entrada), else: passo))
+      end
+
+    with {:ok, s} <- saida, do: {:ok, s, uso(faixa, entrada, s)}
+  end
+
+  defp passo({:chamar, nome, args}), do: passo({:chamar, [{nome, args}]})
+
+  defp passo({:chamar, lista}) when is_list(lista) do
+    chamadas = for {n, a} <- lista, do: %{"id" => "call_#{System.unique_integer([:positive])}", "nome" => n, "args" => a}
+    {:ok, %{"chamadas" => chamadas, "bruto" => []}}
+  end
+
+  defp passo({:texto, t}), do: {:ok, %{"texto" => t}}
+  defp passo({:erro, e}), do: {:error, e}
+
+  defp simples(itens, rascunho?) do
+    case List.last(itens) do
+      %{"papel" => "resultado", "saida" => s} ->
+        dados = (case Jason.decode(s) do {:ok, %{} = m} -> m; _ -> %{} end)
+        %{"texto" => dados["proposta_texto"] || dados["resumo_pausa"] || ""}
+
+      %{"papel" => "corretor", "texto" => t} ->
+        n = t |> String.downcase() |> :unicode.characters_to_nfd_binary() |> String.replace(~r/\p{Mn}/u, "")
+
+        cond do
+          String.contains?(t, ";") or String.starts_with?(n, "pedido") -> chamada("planejar", %{"pedido" => t})
+          Regex.match?(~r/\bativ(a|ar|e|em)\b/, n) -> chamada("propor_ativar", %{"ref" => nil})
+          Regex.match?(~r/\bpaus(a|ar|e|em)\b/, n) -> chamada("pausar", %{"ref" => nil, "motivo" => "pedido do corretor"})
+          rascunho? -> chamada("planejar", %{"pedido" => t})
+          true -> %{"texto" => "Posso te ajudar com as suas campanhas, os anuncios e o desempenho."}
+        end
+
+      _ ->
+        %{"texto" => "Ok."}
+    end
+  end
+
+  defp chamada(nome, args), do: %{"chamadas" => [%{"id" => "call_#{System.unique_integer([:positive])}", "nome" => nome, "args" => args}], "bruto" => []}
+
   defp uso(faixa, e, s),
     do: %{"modelo" => "falso-#{faixa}", "tokens_in" => div(String.length(inspect(e)), 4) + 1, "tokens_out" => div(String.length(inspect(s)), 4) + 1}
 
