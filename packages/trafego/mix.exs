@@ -1,6 +1,6 @@
 defmodule PTrafego.MixProject do
   use Mix.Project
-  @version "1.4.1"
+  @version "1.5.0"
 
   # Dev local (NUCLEO_LOCAL=1, posto pelo mix.exs da raiz): path. No cliente: git + sparse + tag, sem override.
   defp nucleo do
@@ -20,8 +20,14 @@ defmodule PTrafego.MixProject do
           modelos: %{pequena: "gpt-6-luna", media: "gpt-6-luna"},
           esforco: %{pequena: "low", media: "medium"},
           max_tokens: 4000,
-          timeout: 60_000
+          timeout: 60_000,
+          # transcricao de audio (nota de voz); idioma fixo pt
+          transcricao: [modelo: "gpt-transcribe", idioma: "pt"]
         ],
+        # audio do WhatsApp: limites antes de baixar/transcrever (nota de voz tipica: ate ~1 min, < 1 MB)
+        audio: [max_segundos: 120, max_bytes: 10_000_000],
+        # transcricao: USD por minuto (pagina oficial de precos)
+        preco_usd_por_minuto: %{"gpt-transcribe" => 0.0045},
         preco_usd_por_milhao: %{"gpt-6-luna" => {0.10, 0.50}, "gpt-6-sol" => {2.00, 10.00}},
         criativo: [min_lado: 600, proporcao_min: {9, 16}, proporcao_max: {191, 100}, max_bytes: 30_000_000]
       ]]

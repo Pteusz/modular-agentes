@@ -7,7 +7,7 @@ defmodule Trafego.Agente do
   ambigua -> repergunta curta; negativa -> recusa. O texto do corretor nao vira evento.
   """
   alias Nucleo.Registro
-  alias Trafego.{Acesso, Aprendizado, Ativacao, Criativo, Evento, Executor, IA, Plano, Proposta, TetoIA, Verificador}
+  alias Trafego.{Acesso, Aprendizado, Ativacao, Config, Criativo, Evento, Executor, IA, Plano, Proposta, TetoIA, Verificador}
 
   @nome "Nucleo.Automacoes.Trafego"
   @repergunta "so pra confirmar se entendi, posso fazer isso mesmo?"
@@ -131,6 +131,8 @@ defmodule Trafego.Agente do
   Midia que chegou pelo canal (Amarula). Baixa e passa pela mesma conferencia. Se nao der para baixar, avisa e propoe
   alternativa (mandar como documento ou colocar o arquivo no painel) em vez de fingir que recebeu.
   """
+  def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: :audio}} = msg), do: receber_audio(tenant, msg)
+
   def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: kind}} = msg) when kind in [:image, :document, :video] do
     case baixar(msg) do
       {:ok, bytes} when is_binary(bytes) ->
@@ -146,7 +148,76 @@ defmodule Trafego.Agente do
     end
   end
 
-  def receber_midia(_tenant, _msg), do: {:ok, "So aceito imagem (png ou jpg) ou video mp4 como criativo."}
+  def receber_midia(_tenant, _msg), do: {:ok, "So aceito imagem (png ou jpg) ou video mp4 como criativo, ou audio (nota de voz)."}
+
+  # ---- audio (nota de voz): baixa na memoria, transcreve (com o teto de IA) e o texto entra no fluxo normal.
+  # A transcricao pode errar: o agente repete o que entendeu e confirmacao (plano, ativar, pausar) so vale por TEXTO.
+  # O audio e a transcricao nao vao para disco, evento ou log; so metadados (segundos, custo).
+  defp receber_audio(tenant, %Amarula.Msg{content: c}) do
+    max_seg = Config.audio(:max_segundos, 120)
+    max_bytes = Config.audio(:max_bytes, 10_000_000)
+
+    with :ok <- ativo(tenant), :ok <- credencial(tenant) do
+      cond do
+        is_integer(c.seconds) and c.seconds > max_seg ->
+          {:ok, "Esse audio e muito longo (limite de #{max_seg} segundos). Manda um mais curto ou escreve por texto; nada foi alterado."}
+
+        is_integer(c.file_length) and c.file_length > max_bytes ->
+          {:ok, "Esse audio e muito grande para eu transcrever. Manda um mais curto ou escreve por texto; nada foi alterado."}
+
+        true ->
+          case baixar(%Amarula.Msg{channel: :audio, type: :media, raw: nil, content: c}) do
+            {:ok, bytes} when is_binary(bytes) and byte_size(bytes) > max_bytes -> {:ok, "Esse audio e muito grande para eu transcrever. Manda um mais curto ou escreve por texto; nada foi alterado."}
+            {:ok, bytes} when is_binary(bytes) -> transcrever_audio(tenant, bytes, c)
+            _ ->
+              Evento.emitir(tenant, "operacao", nil, "planejador", "audio_nao_baixou", %{"erro" => "download_falhou"})
+              {:ok, "Recebi o aviso do audio mas nao consegui baixar. Tenta mandar de novo ou escreve por texto; nada foi alterado."}
+          end
+      end
+    end
+  end
+
+  defp transcrever_audio(tenant, bytes, c) do
+    # sem duracao no aviso: estima por ~2 KB/s (nota de voz opus), para cima, so para o custo
+    segundos = if is_integer(c.seconds) and c.seconds > 0, do: c.seconds, else: max(1, ceil(byte_size(bytes) / 2000))
+
+    case IA.transcrever(tenant, bytes, %{mime: c.mimetype, segundos: segundos}) do
+      {:ok, texto, uso} ->
+        Evento.custo_audio(tenant, "planejador", "transcrever", uso)
+        Evento.emitir(tenant, "operacao", nil, "planejador", "audio_transcrito", %{"segundos" => uso["segundos"]})
+
+        case String.trim(texto) do
+          "" -> {:ok, "Nao consegui entender o audio. Tenta de novo falando mais perto do microfone ou escreve por texto; nada foi alterado."}
+          fala -> processar_audio(tenant, fala)
+        end
+
+      {:error, {:teto_ia, info}} ->
+        {:ok, TetoIA.mensagem(info)}
+
+      {:error, e} ->
+        Evento.emitir(tenant, "operacao", nil, "planejador", "audio_falhou", %{"erro" => erro_curto(e)})
+        {:ok, "Nao consegui transcrever esse audio agora. Tenta de novo em instantes ou escreve por texto; nada foi alterado."}
+    end
+  end
+
+  defp erro_curto({tipo, _}) when is_atom(tipo), do: Atom.to_string(tipo)
+  defp erro_curto(e) when is_atom(e), do: Atom.to_string(e)
+  defp erro_curto(_), do: "erro"
+
+  # Com plano ou proposta aguardando confirmacao, audio NUNCA responde a ela (nem sim nem nao): so repete o que entendeu.
+  defp processar_audio(tenant, fala) do
+    eco = "Entendi pelo audio: \"#{fala}\"."
+
+    if Plano.atual(tenant)["status"] == "aguardando_confirmacao" or Proposta.atual(tenant) != nil do
+      {:ok, eco <> " Por seguranca, confirmar ou cancelar so vale por texto: responda sim ou nao escrevendo. Nada foi alterado."}
+    else
+      with {:ok, resposta} <- processar(tenant, fala) do
+        pendente? = Plano.atual(tenant)["status"] == "aguardando_confirmacao" or Proposta.atual(tenant) != nil
+        sufixo = if pendente?, do: " Para confirmar, responda por texto (sim ou nao); audio nao confirma.", else: ""
+        {:ok, eco <> " " <> resposta <> sufixo}
+      end
+    end
+  end
 
   # download pelo canal; trocavel por config (:trafego, :baixar_midia) para teste sem rede
   defp baixar(msg), do: Application.get_env(:trafego, :baixar_midia, &Amarula.download_media/1).(msg)

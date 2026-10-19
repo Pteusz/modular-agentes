@@ -17,6 +17,10 @@ defmodule Trafego.IA.Falso do
     {:ok, saida, uso(faixa, entrada, saida)}
   end
 
+  # audio de teste: os bytes SAO o texto falado
+  @impl true
+  def transcrever(bytes, %{segundos: s}) when is_binary(bytes), do: {:ok, bytes, %{"modelo" => "falso-audio", "segundos" => s}}
+
   defp uso(faixa, e, s),
     do: %{"modelo" => "falso-#{faixa}", "tokens_in" => div(String.length(inspect(e)), 4) + 1, "tokens_out" => div(String.length(inspect(s)), 4) + 1}
 

@@ -15,6 +15,20 @@ defmodule Trafego.Evento do
     Registro.evento(tenant, tipo, Map.merge(extra, %{"plano_id" => plano_id, "papel" => papel, "ref" => ref}))
   end
 
+  @doc "custo_tokens de uma transcricao de audio (segundos, sem tokens): entra na mesma soma do teto de IA."
+  def custo_audio(tenant, papel, ref, %{"modelo" => m, "segundos" => s}) do
+    base = %{"modelo" => m, "segundos" => s, "tokens_in" => 0, "tokens_out" => 0, "custo_brl" => Trafego.Custo.brl_audio(m, s)}
+
+    extra =
+      case Trafego.Custo.cotacao_usada(m) do
+        {v, nil} -> Map.put(base, "cotacao", v)
+        {v, data} -> Map.merge(base, %{"cotacao" => v, "cotacao_data" => Date.to_iso8601(data)})
+        nil -> base
+      end
+
+    emitir(tenant, "custo_tokens", nil, papel, ref, extra)
+  end
+
   @doc "custo_tokens a partir do uso devolvido pelo provedor de IA."
   def custo(tenant, plano_id, papel, ref, %{"modelo" => m, "tokens_in" => ti, "tokens_out" => to}) do
     base = %{"modelo" => m, "tokens_in" => ti, "tokens_out" => to, "custo_brl" => Trafego.Custo.brl(m, ti, to)}
