@@ -55,6 +55,18 @@ defmodule Trafego.Plataforma.Meta do
     end
   end
 
+  # leitura: o numero de WhatsApp ligado a Pagina (campo whatsapp_number). Nao cria nada. Se o token nao le o campo, o erro
+  # volta e o Executor segue (a Meta ainda decide, e o erro dela e traduzido).
+  @impl true
+  def numeros_vinculados(%{"pagina_id" => id} = cred) when id not in [nil, ""] do
+    case get(cred, id, fields: "id,whatsapp_number") do
+      {:ok, %{} = pg} -> {:ok, pg["whatsapp_number"] |> List.wrap() |> Enum.filter(&is_binary/1) |> Enum.map(&String.replace(&1, ~r/\D/, "")) |> Enum.reject(&(&1 == ""))}
+      {:error, _} = e -> e
+    end
+  end
+
+  def numeros_vinculados(_), do: {:error, :sem_pagina}
+
   @impl true
   def ler_campanha(cred, id) do
     case get(cred, id, fields: campos()) do
@@ -190,12 +202,13 @@ defmodule Trafego.Plataforma.Meta do
   defp destino_plano(_), do: "site"
 
   defp promovido(_cred, %{"destino" => "site"} = p), do: %{"pixel_id" => p["pixel"], "custom_event_type" => "LEAD"}
-  # WhatsApp: o numero do plano vai no promoted_object (nao exige vinculo previo do numero com a pagina)
+  # WhatsApp: o numero no promoted_object PRECISA estar vinculado a Pagina/conta (a Meta recusa com "This WhatsApp phone number is not
+  # linked to your account"); o Executor confere antes de criar (numeros_vinculados/1). Sem numero: so a Pagina (WhatsApp ligado a ela).
   defp promovido(cred, %{"destino" => "whatsapp", "numero" => n}) when is_binary(n) and n != "", do: %{"page_id" => cred["pagina_id"], "whatsapp_phone_number" => n}
   defp promovido(cred, _p), do: %{"page_id" => cred["pagina_id"]}
 
   defp chamada(%{"destino" => "whatsapp"} = p) do
-    link = "https://api.whatsapp.com/send?phone=#{p["numero"]}"
+    link = if p["numero"] in [nil, ""], do: "https://api.whatsapp.com/send", else: "https://api.whatsapp.com/send?phone=#{p["numero"]}"
     {link, %{"type" => "WHATSAPP_MESSAGE", "value" => %{"app_destination" => "WHATSAPP"}}}
   end
 

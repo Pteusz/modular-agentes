@@ -63,6 +63,25 @@ defmodule Trafego.Feed do
     end
   end
 
+  @doc "Imovel pelo id ou, se nao achar, pelo nome (so se houver UM imovel com esse nome); nil se nao achar."
+  def buscar(nil), do: nil
+
+  def buscar(ref) do
+    ref = ref |> to_string() |> String.trim()
+    imovel(ref) || por_nome(ref)
+  end
+
+  defp por_nome(ref) when byte_size(ref) < 3, do: nil
+
+  defp por_nome(ref) do
+    padrao = "%" <> String.replace(ref, ~r/[%_\\]/, "") <> "%"
+
+    case Banco.q("SELECT id FROM feed_imoveis WHERE fonte = $1 AND nome ILIKE $2 LIMIT 2", [fonte(), padrao]).rows do
+      [[id]] -> imovel(id)
+      _ -> nil
+    end
+  end
+
   # ---- mapeamento
   defp mapear(row) do
     estado = vazio(row["estado_obra"]) || vazio(row["estagio_obra"])

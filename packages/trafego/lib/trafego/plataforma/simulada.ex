@@ -3,11 +3,15 @@ defmodule Trafego.Plataforma.Simulada do
   @behaviour Trafego.Plataforma
   use Agent
 
-  def start_link(_ \\ []), do: Agent.start_link(fn -> %{contas: MapSet.new(), tokens: %{}, campanhas: %{}, seq: 0} end, name: __MODULE__)
+  def start_link(_ \\ []), do: Agent.start_link(fn -> %{contas: MapSet.new(), tokens: %{}, campanhas: %{}, seq: 0, numeros: %{}, cegas: MapSet.new()} end, name: __MODULE__)
 
   # ---- ajuda de teste (lado da "plataforma")
   def registrar_conta(id), do: Agent.update(__MODULE__, fn s -> %{s | contas: MapSet.put(s.contas, id)} end)
   def registrar_token(token, alcance), do: Agent.update(__MODULE__, fn s -> %{s | tokens: Map.put(s.tokens, token, alcance)} end)
+  @doc "Numeros de WhatsApp vinculados a conta (a Meta so cria o conjunto com um deles). `cega: true`: a leitura dos numeros falha (token sem permissao)."
+  def registrar_numeros(conta, lista, opts \\ []),
+    do: Agent.update(__MODULE__, fn s -> %{s | numeros: Map.put(s.numeros, conta, lista), cegas: if(opts[:cega], do: MapSet.put(s.cegas, conta), else: MapSet.delete(s.cegas, conta))} end)
+
   def todas, do: Agent.get(__MODULE__, fn s -> s.campanhas |> Map.values() |> Enum.sort_by(fn c -> c["n"] end) end)
   @doc "Injeta divergencia: altera campos da campanha por fora do executor."
   def injetar(id, attrs), do: Agent.update(__MODULE__, fn s -> %{s | campanhas: Map.update!(s.campanhas, id, fn c -> Map.merge(c, attrs) end)} end)
@@ -21,24 +25,46 @@ defmodule Trafego.Plataforma.Simulada do
     do: Agent.get(__MODULE__, &if(autoriza?(&1, cred), do: {:ok, %{"conta_id" => cred["conta_id"]}}, else: {:error, :credencial_invalida}))
 
   @impl true
+  def numeros_vinculados(cred) do
+    Agent.get(__MODULE__, fn s ->
+      case s.numeros[cred["conta_id"]] do
+        nil -> {:error, :indisponivel}
+        lista -> if MapSet.member?(s.cegas, cred["conta_id"]), do: {:error, :indisponivel}, else: {:ok, lista}
+      end
+    end)
+  end
+
+  @impl true
   def criar_campanha(cred, p) do
     Agent.get_and_update(__MODULE__, fn s ->
-      if autoriza?(s, cred) do
-        n = s.seq + 1
-        # sempre pausada, qualquer que seja o pedido
-        c = %{
-          "id" => "camp_#{n}", "n" => n, "conta_id" => cred["conta_id"], "nome" => p["nome"], "status" => "PAUSADA",
-          "objetivo" => p["objetivo"], "destino" => p["destino"], "orcamento_diario" => p["orcamento_diario"],
-          "teto_total" => p["teto_total"], "janela" => p["janela"],
-          "conjuntos" => [
-            %{"id" => "conj_#{n}", "status" => "PAUSADA", "publico" => p["publico"],
-              "anuncios" => [%{"id" => "anu_#{n}", "status" => "PAUSADA", "criativo" => p["criativo"]}]}
-          ]
-        }
+      lista = s.numeros[cred["conta_id"]]
+      chave = Trafego.Ficha.chave_numero(p["numero"])
 
-        {{:ok, c}, %{s | seq: n, campanhas: Map.put(s.campanhas, c["id"], c)}}
-      else
-        {{:error, :credencial_invalida}, s}
+      cond do
+        not autoriza?(s, cred) ->
+          {{:error, :credencial_invalida}, s}
+
+        # como a Meta: a campanha nasce e o conjunto recusa o numero nao vinculado (fica uma campanha orfa pausada)
+        p["destino"] == "whatsapp" and p["numero"] not in [nil, ""] and is_list(lista) and not Enum.any?(lista, &(Trafego.Ficha.chave_numero(&1) == chave)) ->
+          n = s.seq + 1
+          orfa = %{"id" => "camp_#{n}", "n" => n, "conta_id" => cred["conta_id"], "nome" => p["nome"], "status" => "PAUSADA", "conjuntos" => []}
+          erro = %{"campanha_id" => orfa["id"], "erro" => "graph_100: Falha ao criar campanha: This WhatsApp phone number is not linked to your account"}
+          {{:error, {:parcial, "adsets", erro}}, %{s | seq: n, campanhas: Map.put(s.campanhas, orfa["id"], orfa)}}
+
+        true ->
+          n = s.seq + 1
+          # sempre pausada, qualquer que seja o pedido
+          c = %{
+            "id" => "camp_#{n}", "n" => n, "conta_id" => cred["conta_id"], "nome" => p["nome"], "status" => "PAUSADA",
+            "objetivo" => p["objetivo"], "destino" => p["destino"], "orcamento_diario" => p["orcamento_diario"],
+            "teto_total" => p["teto_total"], "janela" => p["janela"],
+            "conjuntos" => [
+              %{"id" => "conj_#{n}", "status" => "PAUSADA", "publico" => p["publico"],
+                "anuncios" => [%{"id" => "anu_#{n}", "status" => "PAUSADA", "criativo" => p["criativo"]}]}
+            ]
+          }
+
+          {{:ok, c}, %{s | seq: n, campanhas: Map.put(s.campanhas, c["id"], c)}}
       end
     end)
   end

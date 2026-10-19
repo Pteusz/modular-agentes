@@ -202,6 +202,9 @@ defmodule Trafego.IA.OpenAI do
     objetivo: o que ele quer com o anuncio, em poucas palavras (vender, gerar contatos, divulgar lancamento...). imovel: nome ou id do imovel anunciado.
     Campo que o plano_atual ja tem fica como esta: so mude um campo se o corretor corrigiu AQUELE campo (correcao muda so ele; os outros ficam nulos aqui). Nunca devolva de novo o que ja estava preenchido e nao foi corrigido.
     Se o corretor disse que nao tem teto ou nao quer definir, sem_teto = true (deixe teto_total nulo). Nao invente verba nem teto.
+    numero: o numero de WhatsApp EXATAMENTE como o corretor disse (com o DDD se ele disse); NAO complete DDD, NAO invente digitos. Se ele responder so o DDD (ex.: "11"), devolva so o DDD em numero.
+    Se ele disser que quer seguir sem numero (usar o WhatsApp ligado a Pagina), sem_numero = true (numero nulo).
+    TEXTO DO ANUNCIO (criativo.texto sugerido): use os dados do imovel que o corretor deu (nome, bairro, dormitorios), curto e especifico; NUNCA slogan generico ("Encontre seu proximo imovel").
     SUGESTOES: se o corretor NAO disse, voce pode sugerir publico (so por regiao e perfil do imovel, sem idade, genero, CEP ou perfil de pessoa: e anuncio de imovel/HOUSING) e criativo.texto
     (texto do anuncio sem promessa de rentabilidade ou valorizacao, sem discriminar, sem prometer garantia). Tudo que voce sugerir deve ser listado em "sugeridos" ("publico" e/ou "criativo"); o que o corretor disse nunca entra em "sugeridos".
     Se algo ficou ambiguo (valor que pode ser diario ou total, dois imoveis possiveis...), nao escolha: descreva em "ambiguidade", em uma frase, o que ficou ambiguo, e deixe o campo nulo.
@@ -211,7 +214,7 @@ defmodule Trafego.IA.OpenAI do
     do: """
     O corretor respondeu a uma pergunta de confirmacao do plano resumido. Classifique a resposta:
     "sim" so se for uma autorizacao clara para executar; "nao" se recusou ou mandou cancelar; "ajuste" se pediu para mudar algo do plano
-    (verba, publico, texto do anuncio, janela, meta...) sem recusar o plano; "ambiguo" em qualquer duvida, condicao, pergunta ou assunto diferente. Na duvida, "ambiguo".
+    (verba, publico, texto do anuncio, janela, meta...) ou deu um dado novo ou corrigido (numero de WhatsApp, DDD, link...) sem recusar o plano; "sim" tambem vale para "tenta de novo" depois de um erro; "ambiguo" em qualquer duvida, condicao, pergunta ou assunto diferente. Na duvida, "ambiguo".
     """
 
   defp instrucao_falar,
@@ -259,7 +262,7 @@ defmodule Trafego.IA.OpenAI do
     props = %{
       "destino" => %{"type" => ["string", "null"], "enum" => @destinos ++ [nil]},
       "url" => nulo.("string"), "pixel" => nulo.("string"), "numero" => nulo.("string"), "formulario" => nulo.("string"), "imovel" => nulo.("string"),
-      "publico" => nulo.("string"), "objetivo" => nulo.("string"), "ambiguidade" => nulo.("string"), "sem_teto" => nulo.("boolean"),
+      "publico" => nulo.("string"), "objetivo" => nulo.("string"), "ambiguidade" => nulo.("string"), "sem_teto" => nulo.("boolean"), "sem_numero" => nulo.("boolean"),
       "sugeridos" => %{"type" => ["array", "null"], "items" => %{"type" => "string", "enum" => ["publico", "criativo"]}},
       "criativo" => obj.(%{"midia" => nulo.("string"), "texto" => nulo.("string")}),
       "orcamento_diario" => nulo.("integer"), "teto_total" => nulo.("integer"),

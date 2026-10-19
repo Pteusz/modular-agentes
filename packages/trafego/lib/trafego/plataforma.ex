@@ -13,6 +13,9 @@ defmodule Trafego.Plataforma do
   @callback pausar_campanha(cred, id :: String.t()) :: {:ok, map} | {:error, term}
   @callback ativar_campanha(cred, id :: String.t()) :: {:ok, map} | {:error, term}
   @callback listar_campanhas(cred) :: {:ok, [map]} | {:error, term}
+  @doc "Numeros de WhatsApp vinculados a Pagina/conta (so digitos, com 55): a Meta so aceita anunciar com numero vinculado. Leitura, nunca cria nada."
+  @callback numeros_vinculados(cred) :: {:ok, [String.t()]} | {:error, term}
+  @optional_callbacks numeros_vinculados: 1
   @doc "Metricas dos ultimos `dias` dias de UMA campanha da conta: gasto (centavos), alcance, cliques, mensagens_iniciadas, resultados."
   @callback metricas(cred, id :: String.t(), dias :: pos_integer()) :: {:ok, map} | {:error, term}
 
