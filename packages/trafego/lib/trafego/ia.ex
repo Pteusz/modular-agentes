@@ -37,11 +37,27 @@ defmodule Trafego.IA do
 
   @callback transcrever(bytes :: binary, meta :: %{mime: String.t(), segundos: pos_integer}) :: {:ok, texto :: String.t(), uso :: map} | {:error, term}
 
+  @doc "Fala (TTS, etapa 5.2.3): texto -> audio opus (nota de voz). uso: modelo, segundos (estimado), caracteres, mime. Callback opcional."
+  @callback sintetizar(texto :: String.t()) :: {:ok, bytes :: binary, uso :: map} | {:error, term}
+  @optional_callbacks sintetizar: 1
+
   @doc "Chamada com teto: {:ok, saida, uso} | {:error, {:teto_ia, info}} (sem chamar o provedor) | {:error, outro}"
   def chamar(tenant, faixa, tarefa, entrada), do: com_teto(tenant, plano_id(entrada), fn -> provedor().chamar(faixa, tarefa, entrada) end)
 
   @doc "Transcricao de audio com o mesmo teto de custo da IA: {:ok, texto, uso} | {:error, {:teto_ia, info}} | {:error, outro}. Uso: %{modelo, segundos}."
   def transcrever(tenant, bytes, meta), do: com_teto(tenant, nil, fn -> provedor().transcrever(bytes, meta) end)
+
+  @doc """
+  Fala com o mesmo teto de custo da IA: {:ok, bytes, uso} | {:error, {:teto_ia, info}} | {:error, outro}. Provedor sem fala = {:error, :sem_voz}.
+  O custo NAO e registrado aqui: quem usa o audio registra (Trafego.Voz), so quando ele foi gerado.
+  """
+  def sintetizar(tenant, texto) do
+    com_teto(tenant, nil, fn ->
+      mod = provedor()
+      Code.ensure_loaded(mod)
+      if function_exported?(mod, :sintetizar, 1), do: mod.sintetizar(texto), else: {:error, :sem_voz}
+    end)
+  end
 
   defp com_teto(tenant, plano_id, f) do
     case TetoIA.status(tenant) do

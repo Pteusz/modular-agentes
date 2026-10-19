@@ -1,10 +1,10 @@
-# Teste da etapa 5.1 (Iara: persona em todas as respostas, primeiro contato e horario, audio tratado como texto).
+# Teste da etapa 5.1 ([Iara] persona em todas as respostas, primeiro contato e horario, audio tratado como texto).
 # Escrito ANTES de construir. Rodar: MIX_ENV=test mix test test/etapa51_test.exs
 # REGRA: tenants tpi_* (so os proprios dados, nunca limpar tabela inteira). Nenhuma chamada real: IA pelo provedor Falso, por um
 # espiao que embrulha o Falso, e (adaptador) por servidor HTTP falso local. Nenhum audio em disco.
 defmodule IaEspia do
   @moduledoc false
-  # Embrulha o Falso: :falar devolve "Iara: " + texto-base composto. Modos (Process.get(:espia)): :erro | :vazio | :perde_valor.
+  # Embrulha o Falso: :falar devolve "[Iara] " + texto-base composto. Modos (Process.get(:espia)): :erro | :vazio | :perde_valor.
   # Cada chamada avisa o processo do teste ({:ia, tarefa, entrada}); as chamadas rodam no processo do teste.
   @behaviour Trafego.IA
   alias Trafego.IA.Falso
@@ -16,10 +16,10 @@ defmodule IaEspia do
     case Process.get(:espia) do
       :erro -> {:error, :boom}
       :vazio -> {:ok, %{"texto" => "   "}, uso(faixa)}
-      :perde_valor -> {:ok, %{"texto" => "Iara: tudo certo, ja resolvi aqui."}, uso(faixa)}
+      :perde_valor -> {:ok, %{"texto" => "[Iara] tudo certo, ja resolvi aqui."}, uso(faixa)}
       _ ->
         {:ok, %{"texto" => t}, u} = Falso.chamar(faixa, :falar, entrada)
-        {:ok, %{"texto" => "Iara: " <> t}, u}
+        {:ok, %{"texto" => "[Iara] " <> t}, u}
     end
   end
 
@@ -130,14 +130,14 @@ defmodule Etapa51Test do
 
   test "TODA resposta ao corretor passa pela fala da Iara (texto, ativar, pausar, confirmar, erro) e carrega os fatos do texto-base" do
     t = tenant_pronto()
-    # o plano sai em mensagens curtas de texto fixo (etapa 5.2); o prefixo "Iara: " vem do laco, nao da fala
+    # o plano sai em mensagens curtas de texto fixo (etapa 5.2); o prefixo "[Iara] " vem do laco, nao da fala
     r = dizer(t, @pedido)
     assert r =~ "Voce confirma?" and r =~ "R$ 50,00"
     refute_received {:ia, :falar, _}
 
     for texto <- ["pode fazer sim", "ativa a campanha", "sim, pode ativar", "pausa a campanha", "sim, pode pausar", "ativa a campanha", "nao, deixa"] do
       r = dizer(t, texto)
-      assert String.starts_with?(r, "Iara: "), "sem a voz da Iara: #{texto} -> #{r}"
+      assert String.starts_with?(r, "[Iara] "), "sem a voz da [Iara] #{texto} -> #{r}"
       assert_received {:ia, :falar, _}
     end
 
@@ -156,7 +156,7 @@ defmodule Etapa51Test do
     # primeira volta sem fala: apresentacao + base fixos
     Process.put(:espia, :erro)
     r = dizer(t, @pedido)
-    refute r =~ "Iara: "
+    refute r =~ "[Iara] "
     assert r =~ "Eu sou a Iara" and r =~ "Voce confirma?" and r =~ "R$ 50,00" and r =~ "PAUSADO"
 
     Process.put(:espia, :vazio)
@@ -187,7 +187,7 @@ defmodule Etapa51Test do
     flush()
     r = dizer(t, "quero anunciar outro lancamento")
     assert r =~ ~r/teto de IA/i and r =~ "nada foi alterado"
-    refute r =~ "Iara: "
+    refute r =~ "[Iara] "
     refute_received {:ia, :falar, _}
     assert length(custos(t)) == n
     # sem horario: decisao do codigo (sem IA) continua valendo

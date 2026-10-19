@@ -43,6 +43,36 @@ defmodule Trafego.IA.OpenAI do
     end
   end
 
+  @doc """
+  Fala da Iara: POST /v1/audio/speech (gpt-4o-mini-tts, voz feminina, instrucoes de tom, formato opus = ogg/opus, aceito como nota de voz).
+  A API nao devolve uso: a duracao e estimada por caracteres (Config.voz :chars_por_segundo) para o custo.
+  """
+  @impl true
+  def sintetizar(texto) when is_binary(texto) do
+    modelo = Config.voz(:modelo, "gpt-4o-mini-tts")
+    url = Config.openai(:base_url, "https://api.openai.com") <> "/v1/audio/speech"
+
+    corpo = %{
+      model: modelo,
+      voice: Config.voz(:voz, "marin"),
+      input: texto,
+      instructions: Config.voz(:instrucoes, ""),
+      response_format: Config.voz(:formato, "opus")
+    }
+
+    with {:ok, chave} <- chave(),
+         {:ok, %{status: 200, body: bytes}} when is_binary(bytes) and bytes != "" <-
+           Req.request(method: :post, url: url, json: corpo, headers: [{"authorization", "Bearer " <> chave}], retry: false, decode_body: false, receive_timeout: Config.openai(:timeout, 60_000)) do
+      n = String.length(texto)
+      {:ok, bytes, %{"modelo" => modelo, "caracteres" => n, "segundos" => max(ceil(n / Config.voz(:chars_por_segundo, 15)), 1), "mime" => "audio/ogg; codecs=opus"}}
+    else
+      {:error, ex} when is_exception(ex) -> {:error, {:rede, ex |> Exception.message() |> String.slice(0, 120)}}
+      {:error, _} = e -> e
+      {:ok, %{status: s}} -> {:error, {:http, s}}
+      _ -> {:error, :resposta_inesperada}
+    end
+  end
+
   defp pedir_audio(chave, modelo, idioma, bytes, mime) do
     url = Config.openai(:base_url, "https://api.openai.com") <> "/v1/audio/transcriptions"
     {ext, tipo} = formato(mime)

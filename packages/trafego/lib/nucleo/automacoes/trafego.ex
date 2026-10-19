@@ -41,13 +41,16 @@ defmodule Nucleo.Automacoes.Trafego do
   end
 
   @doc "Prefixo das mensagens da Iara no WhatsApp e no painel (Nucleo.Laco usa; padrao dos outros agentes: \"[agente] \")."
-  def prefixo, do: "Iara: "
+  def prefixo, do: "[Iara] "
 
   @doc "Conversa do corretor (texto do chat dele consigo mesmo) -> resposta do agente. O laco chama; ver Nucleo.Laco."
-  def conversar(tenant, texto), do: Trafego.Agente.processar_mensagens(tenant, texto)
+  def conversar(tenant, texto), do: tenant |> Trafego.Agente.processar_mensagens(texto) |> Trafego.Voz.aplicar_seguro(tenant, "texto")
 
   @doc "Midia que chegou pelo canal (criativo pelo WhatsApp)."
-  def midia(tenant, msg), do: Trafego.Agente.receber_midia_mensagens(tenant, msg)
+  def midia(tenant, msg) do
+    origem = if match?(%Amarula.Msg{content: %Amarula.Content.Media{kind: :audio}}, msg), do: "audio", else: "texto"
+    tenant |> Trafego.Agente.receber_midia_mensagens(msg) |> Trafego.Voz.aplicar_seguro(tenant, origem)
+  end
 
   @impl Nucleo.Automacao
   def retencao,

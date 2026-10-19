@@ -249,10 +249,13 @@ defmodule Trafego.Ficha do
         p |> Map.put("destino", d) |> Map.put("resultado", resultado(d)) |> marcar("destino", "iara")
       end
 
-    if p["destino"] == "whatsapp" and not presente?(p["numero"]) do
-      case ultimo_numero(tenant) do
+    f = ficha(p)
+
+    if p["destino"] == "whatsapp" and not presente?(p["numero"]) and f["sem_numero"] != true and not is_binary(f["numero_sem_ddd"]) and
+         not is_binary(f["numero_invalido"]) do
+      case Trafego.Cadastro.numero(tenant) do
         nil -> p
-        n -> p |> Map.put("numero", n) |> marcar_se_vazio("numero", "iara")
+        n -> p |> Map.put("numero", n) |> marcar_se_vazio("numero", "cadastro")
       end
     else
       p
@@ -262,11 +265,6 @@ defmodule Trafego.Ficha do
   defp resultado("site"), do: "evento_pixel"
   defp resultado("whatsapp"), do: "conversa_iniciada"
   defp resultado(_), do: "lead"
-
-  # o numero de WhatsApp que o corretor ja usou em plano anterior vira sugestao
-  defp ultimo_numero(tenant) do
-    tenant |> Plano.listar() |> Enum.reverse() |> Enum.find_value(fn p -> p && presente?(p["numero"]) && match?({:ok, _}, normalizar_numero(p["numero"])) && elem(normalizar_numero(p["numero"]), 1) end)
-  end
 
   defp janela(p) do
     if presente?(get_in(p, ["janela", "inicio"])) and presente?(get_in(p, ["janela", "fim"])) do
@@ -456,7 +454,7 @@ defmodule Trafego.Ficha do
 
   defp destino_txt(%{"destino" => "whatsapp"} = p) do
     cond do
-      presente?(p["numero"]) -> "conversa no WhatsApp (#{formatar_numero(p["numero"])})"
+      presente?(p["numero"]) -> "conversa no WhatsApp (#{formatar_numero(p["numero"])}#{if origem(p, "numero") == "cadastro", do: ", do seu cadastro", else: ""})"
       ficha(p)["sem_numero"] == true -> "conversa no WhatsApp da sua Pagina"
       true -> "conversa no WhatsApp"
     end

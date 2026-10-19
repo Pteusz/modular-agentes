@@ -1,4 +1,4 @@
-# Teste da etapa 5.2 (Iara: ficha de estado, plano em mensagens curtas, perguntas numeradas, prefixo "Iara: " por agente).
+# Teste da etapa 5.2 ([Iara] ficha de estado, plano em mensagens curtas, perguntas numeradas, prefixo "[Iara] " por agente).
 # Rodar: MIX_ENV=test mix test test/etapa52_test.exs
 # REGRA: tenants tp52_* (so os proprios dados). IA pelo provedor Falso; nenhuma chamada real.
 defmodule Etapa52Test do
@@ -179,14 +179,14 @@ defmodule Etapa52Test do
     assert %{"status" => "aguardando_confirmacao"} = Plano.atual(t)
   end
 
-  test "pelo laco: prefixo \"Iara: \" em cada mensagem, ordem mantida, teto_por_min respeitado" do
+  test "pelo laco: prefixo \"[Iara] \" em cada mensagem, ordem mantida, teto_por_min respeitado" do
     t = tenant_pronto()
     {:ok, p} = Conexao.conectar(t)
     ref = Laco.canal(p)
     Canal.Simulado.injetar(ref, :proprio, @completo)
     assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Voce confirma?")) end)
     env = Canal.Simulado.enviadas(ref)
-    assert length(env) >= 5 and Enum.all?(env, &String.starts_with?(&1, "Iara: "))
+    assert length(env) >= 5 and Enum.all?(env, &String.starts_with?(&1, "[Iara] "))
     assert Enum.find_index(env, &(&1 =~ "Montei o plano")) < Enum.find_index(env, &(&1 =~ "Voce confirma?"))
     Conexao.encerrar(t)
 
@@ -198,17 +198,17 @@ defmodule Etapa52Test do
     Canal.Simulado.injetar(ref2, :proprio, @completo)
     assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref2), &(&1 =~ "Voce confirma?")) end)
     env2 = Canal.Simulado.enviadas(ref2)
-    assert length(env2) == 3 and Enum.all?(env2, &String.starts_with?(&1, "Iara: "))
+    assert length(env2) == 3 and Enum.all?(env2, &String.starts_with?(&1, "[Iara] "))
     assert junto(env2) =~ "Montei o plano" and List.last(env2) =~ "Voce confirma?"
     Conexao.encerrar(t2)
   end
 
-  test "prefixo e por agente: eco continua com [agente] e o painel mostra Iara:" do
-    assert Contrato.prefixo() == "Iara: "
+  test "prefixo e por agente: eco continua com [agente] e o painel mostra [Iara]" do
+    assert Contrato.prefixo() == "[Iara] "
     assert Nucleo.Laco.prefixo_padrao() == "[agente] "
 
     t = tenant_pronto()
     dizer(t, @completo)
-    assert %{"prefixo" => "Iara:", "status" => "aguardando_confirmacao"} = Trafego.Painel.plano_aguardando(t)
+    assert %{"prefixo" => "[Iara]", "status" => "aguardando_confirmacao"} = Trafego.Painel.plano_aguardando(t)
   end
 end

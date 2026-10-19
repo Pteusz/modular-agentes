@@ -10,7 +10,7 @@ defmodule Trafego.Painel do
   @doc "Plano aguardando confirmacao (a autorizacao e SO no WhatsApp) ou nil."
   def plano_aguardando(tenant) do
     case Plano.atual(tenant) do
-      %{"status" => "aguardando_confirmacao"} = p -> p |> Map.put("resumo", Plano.resumo(p)) |> Map.put("prefixo", "Iara:")
+      %{"status" => "aguardando_confirmacao"} = p -> p |> Map.put("resumo", Plano.resumo(p)) |> Map.put("prefixo", "[Iara]")
       _ -> nil
     end
   end

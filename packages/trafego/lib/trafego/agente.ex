@@ -106,10 +106,22 @@ defmodule Trafego.Agente do
 
   defp continuar(tenant, texto, origem) do
     cond do
+      (pref = Iara.preferencia_voz(texto)) != nil -> preferir_voz(tenant, pref, texto, origem)
       Iara.desligar?(texto) -> entregar(tenant, {:ok, @sem_desligar}, texto, origem, horario: false)
       Iara.mudar_horario?(texto) -> mudar_horario(tenant, texto, origem)
       true -> entregar(tenant, despachar(tenant, texto), texto, origem)
     end
+  end
+
+  # "responde em audio" / "so texto": vale dai em diante (perfil), nao muda nada nos planos
+  defp preferir_voz(tenant, :audio, texto, origem) do
+    Iara.atualizar(tenant, %{"voz" => "audio"})
+    entregar(tenant, {:ok, "Fechado, daqui pra frente te respondo por audio nas conversas. O que for pra conferir, como valores e resumo do plano, continua em texto. Se quiser so texto, e so falar."}, texto, origem, horario: false)
+  end
+
+  defp preferir_voz(tenant, :texto, texto, origem) do
+    Iara.atualizar(tenant, %{"voz" => "texto"})
+    entregar(tenant, {:ok, "Beleza, daqui pra frente so texto. Se quiser que eu volte a responder por audio, e so pedir."}, texto, origem, horario: false)
   end
 
   defp padrao(tenant), do: Iara.atualizar(tenant, %{"horario" => Iara.horario_padrao(), "horario_estado" => "padrao"})

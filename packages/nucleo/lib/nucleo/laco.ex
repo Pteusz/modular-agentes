@@ -3,10 +3,14 @@ defmodule Nucleo.Laco do
   Laco (esqueleto), um processo por tenant: mensagem entra -> le estado -> gancho -> grava estado -> responde pelo canal.
   Resposta prefixada; envio limitado por `teto_por_min` (config do tenant, padrao 10).
 
-  Prefixo: padrao "[agente] "; a automacao pode ter o seu (callback opcional `prefixo/0`, ex.: "Iara: ") e ele vale para respostas
+  Prefixo: padrao "[agente] "; a automacao pode ter o seu (callback opcional `prefixo/0`, ex.: "[Iara] ") e ele vale para respostas
   e avisos. `conversar/2` pode devolver `{:ok, [textos]}`: cada mensagem sai separada, em ordem, com prefixo, dentro do teto_por_min
   (o que nao couber no orcamento restante vai junto na ultima mensagem; se nao resta nada, e um unico `envio_limitado`).
   Pausa entre mensagens: config do tenant `pausa_envio_ms` (padrao 0).
+
+  Nota de voz (1.5.0): cada elemento da resposta pode ser `{:audio, bytes, opts, texto}` em vez de texto. Sai por `enviar_audio/3` do
+  canal, SEM prefixo (voz nao tem prefixo textual), e conta no teto_por_min como qualquer mensagem; o gancho `{:enviar, texto}` ve o
+  texto equivalente. Canal sem `enviar_audio` ou envio que falha = o mesmo `texto` sai como mensagem de texto, com prefixo (nunca silencia).
   """
   use GenServer
   alias Nucleo.{Registro, Gancho}
@@ -143,7 +147,7 @@ defmodule Nucleo.Laco do
   # o texto/midia do corretor nao vira evento: so o resultado (resposta enviada ou falha sem conteudo)
   defp conversar(s, f) do
     case f.() do
-      {:ok, resposta} when is_binary(resposta) -> responder(s, resposta)
+      {:ok, resposta} when is_binary(resposta) or (is_tuple(resposta) and elem(resposta, 0) == :audio) -> responder(s, resposta)
       {:ok, [_ | _] = respostas} -> responder_lista(s, respostas)
       {:error, e} -> Registro.evento(s.tenant, "conversa_falhou", %{"erro" => inspect(e)})
       _ -> :ok
@@ -154,6 +158,18 @@ defmodule Nucleo.Laco do
 
   defp ler(t, k, :ultimo), do: Registro.ler(t, k)
   defp ler(t, k, :historico), do: Enum.map(Registro.historico(t, k), & &1.valor)
+
+  defp responder(s, {:audio, _, _, texto} = item) do
+    teto = Registro.config(s.tenant)["teto_por_min"] || 10
+
+    with :ok <- Gancho.intercepta(s.tenant, {:enviar, texto}),
+         {:limite, false} <- {:limite, Registro.eventos_recentes(s.tenant, "enviado", 60) >= teto} do
+      enviar(s, item)
+    else
+      {:limite, true} -> Registro.evento(s.tenant, "envio_limitado")
+      {:bloquear, m} -> Registro.evento(s.tenant, "envio_bloqueado", %{"motivo" => m})
+    end
+  end
 
   defp responder(s, texto) do
     teto = Registro.config(s.tenant)["teto_por_min"] || 10
@@ -167,12 +183,30 @@ defmodule Nucleo.Laco do
     end
   end
 
+  defp enviar(s, {:audio, bytes, opts, texto}) do
+    Code.ensure_loaded(s.mod)
+
+    r = if function_exported?(s.mod, :enviar_audio, 3), do: s.mod.enviar_audio(s.ref, bytes, opts), else: {:error, :sem_audio}
+
+    case r do
+      :ok ->
+        Registro.evento(s.tenant, "enviado", %{"tipo" => "audio"})
+
+      {:error, e} ->
+        Registro.evento(s.tenant, "audio_falhou", %{"erro" => inspect(e)})
+        enviar(s, texto)
+    end
+  end
+
   defp enviar(s, texto) do
     case s.mod.enviar_texto(s.ref, s.prefixo <> texto) do
       :ok -> Registro.evento(s.tenant, "enviado")
       {:error, e} -> Registro.evento(s.tenant, "envio_falhou", %{"erro" => inspect(e)})
     end
   end
+
+  defp texto_de({:audio, _, _, t}), do: t
+  defp texto_de(t), do: t
 
   # varias mensagens em ordem; cada uma com prefixo; respeita o teto_por_min restante
   defp responder_lista(s, textos) do
@@ -191,7 +225,7 @@ defmodule Nucleo.Laco do
       true ->
         {cabem, resto} = Enum.split(textos, restante - 1)
         Enum.each(cabem, &responder(s, &1))
-        responder(s, Enum.join(resto, "
+        responder(s, resto |> Enum.map(&texto_de/1) |> Enum.join("
 
 "))
     end

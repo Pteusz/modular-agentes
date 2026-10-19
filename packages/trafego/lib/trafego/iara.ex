@@ -17,13 +17,13 @@ defmodule Trafego.Iara do
   @horario_padrao "09:00"
   @max_chars 900
 
-  @apresentacao "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora. Sou uma IA e cuido das suas campanhas de anuncios, do feed de imoveis e do desempenho. Me adapto ao seu jeito e aprendo com o tempo, melhorando a cada campanha."
+  @apresentacao "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora. Sou uma IA e cuido das suas campanhas de anuncios, do feed de imoveis e do desempenho. Me adapto ao seu jeito e aprendo com o tempo, melhorando a cada campanha. Se preferir, pode me mandar audio que eu entendo."
   @pergunta_horario "Qual o melhor horario para eu te atualizar todo dia sobre as campanhas? Se voce nao disser, uso 9h; da para mudar depois."
 
   # a apresentacao sai em 2 mensagens curtas (quem sou; que aprendo com o tempo), nunca num bloco so
   @apresentacao_msgs [
     "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora. Sou uma IA e cuido das suas campanhas de anuncios, do feed de imoveis e do desempenho.",
-    "Me adapto ao seu jeito e aprendo com o tempo, melhorando a cada campanha."
+    "Me adapto ao seu jeito e aprendo com o tempo, melhorando a cada campanha. Se preferir, pode me mandar audio que eu entendo."
   ]
 
   def apresentacao, do: @apresentacao
@@ -88,6 +88,31 @@ defmodule Trafego.Iara do
 
     String.length(n) < 160 and
       Regex.match?(~r/\b(muda|mudar|mude|troca|trocar|troque|altera|alterar|prefiro|melhor)\b.*\b(horario|hora)\b/, n)
+  end
+
+  # ---- voz (etapa 5.2.3): preferencia por audio ou texto, guardada no perfil ("voz": "audio" | "texto"; sem ela, a Iara acompanha o corretor)
+  @doc "Preferencia de resposta do corretor: \"audio\" | \"texto\" | nil (acompanha: audio com audio, texto com texto)."
+  def voz_preferida(tenant), do: perfil(tenant)["voz"]
+
+  @doc "Pedido explicito de como responder: :audio | :texto | nil. Texto curto; \"so texto\" / \"para de mandar audio\" = :texto."
+  def preferencia_voz(texto) do
+    n = norm(texto)
+
+    cond do
+      String.length(n) >= 120 ->
+        nil
+
+      Regex.match?(~r/\b(so|apenas|somente)\b.*\b(texto|escrito|escrever)\b/, n) or
+        Regex.match?(~r/\b(responde|responda|manda|mande|escreve|escreva|volta|voltar|prefiro|quero)\b.*\b(texto|escrito)\b/, n) or
+          Regex.match?(~r/\b(para|pare|chega|sem|nao (quero|manda|mande|precisa))\b.*\b(audio|voz)\b/, n) ->
+        :texto
+
+      Regex.match?(~r/\b(responde|responda|manda|mande|fala|fale|me responde|prefiro|quero|so|sempre)\b.*\b(audio|voz)\b/, n) ->
+        :audio
+
+      true ->
+        nil
+    end
   end
 
   # ---- fala
