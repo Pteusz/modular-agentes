@@ -19,6 +19,7 @@ defmodule Etapa523Test do
     @behaviour Trafego.IA
     defdelegate chamar(f, t, e), to: Trafego.IA.Falso
     defdelegate transcrever(b, m), to: Trafego.IA.Falso
+    defdelegate turno(f, e), to: Trafego.IA.Falso
     def sintetizar(_), do: {:error, {:http, 500}}
   end
 
@@ -27,6 +28,7 @@ defmodule Etapa523Test do
     @behaviour Trafego.IA
     defdelegate chamar(f, t, e), to: Trafego.IA.Falso
     defdelegate transcrever(b, m), to: Trafego.IA.Falso
+    defdelegate turno(f, e), to: Trafego.IA.Falso
   end
 
   # canal que so entende texto (sem enviar_audio/3)
@@ -252,21 +254,17 @@ defmodule Etapa523Test do
   end
 
   test "preferencia explicita: \"responde em audio\" / \"so texto\" fica no perfil e manda sobre a origem" do
-    assert Iara.preferencia_voz("responde em audio") == :audio
-    assert Iara.preferencia_voz("pode me responder por audio daqui pra frente?") == :audio or Iara.preferencia_voz("me responde por audio") == :audio
-    assert Iara.preferencia_voz("so texto, por favor") == :texto
-    assert Iara.preferencia_voz("para de mandar audio") == :texto
-    assert Iara.preferencia_voz("responde por texto") == :texto
-    assert Iara.preferencia_voz("quero anunciar o lancamento Torre Sul") == nil
-    assert Iara.preferencia_voz("nao quero audio, so texto") == :texto
-
+    # 5.3: a preferencia nao sai mais de regex; o modelo a grava pela ferramenta `lembrar` (lista fechada de chaves)
+    on_exit(fn -> Application.delete_env(:trafego, :roteiro_ia) end)
     t = tenant_pronto()
     assert Iara.voz_preferida(t) == nil
+    Application.put_env(:trafego, :roteiro_ia, [{:chamar, "lembrar", %{"chave" => "preferencia_voz", "valor" => "audio"}}, {:texto, "Fechado, daqui pra frente respondo em audio."}])
     assert junto(dizer(t, "responde em audio")) =~ ~r/audio/i
     assert Iara.perfil(t)["voz"] == "audio" and Iara.voz_preferida(t) == "audio"
     # persiste: agora ate a mensagem escrita volta em voz
     assert {:ok, {:audio, _, _, "Voce confirma?"}} = Voz.aplicar(t, {:ok, "Voce confirma?"}, "texto")
 
+    Application.put_env(:trafego, :roteiro_ia, [{:chamar, "lembrar", %{"chave" => "preferencia_voz", "valor" => "texto"}}, {:texto, "Combinado, so texto."}])
     assert junto(dizer(t, "so texto")) =~ ~r/texto/i
     assert Iara.perfil(t)["voz"] == "texto"
     # texto manda ate sobre um audio recebido
@@ -376,9 +374,9 @@ defmodule Etapa523Test do
     System.delete_env("OPENAI_API_KEY")
   end
 
-  test "versoes: nucleo 1.5.0 (canal com enviar_audio opcional) e trafego 1.8.0" do
+  test "versoes: nucleo 1.5.0 (canal com enviar_audio opcional) e trafego 1.9.0" do
     assert to_string(Application.spec(:nucleo, :vsn)) == "1.5.0"
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.8.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.9.0"
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:optional_callbacks)
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:callbacks)
     Code.ensure_loaded!(Nucleo.Canal.Simulado)

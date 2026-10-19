@@ -28,6 +28,9 @@ defmodule IaEspia511 do
 
   @impl true
   def transcrever(bytes, meta), do: Falso.transcrever(bytes, meta)
+
+  @impl true
+  def turno(faixa, entrada), do: Falso.turno(faixa, entrada)
 end
 
 defmodule Etapa511Test do
@@ -161,11 +164,11 @@ defmodule Etapa511Test do
 
     # o corretor pergunta em vez de responder: a entrada da fala leva a pergunta e o que ja foi pedido
     segunda = dizer(t, "mas pra que serve esse pixel?")
-    assert_received {:ia, :falar, e2}
-    assert e2["mensagem_do_corretor"] == "mas pra que serve esse pixel?"
-    assert e2["respondendo_pergunta"] == true
-    assert e2["ultima_pergunta_feita"] =~ "pixel"
-    assert e2["ja_temos"]["destino"] == "site"
+    # 5.3: a pergunta vai para a conversa (planejar com o texto dela e o plano em andamento), nao para a fala
+    assert_received {:ia, :planejar, %{"texto" => "pedido destino site; url https://corretor.com.br/lancamento"}}
+    assert_received {:ia, :planejar, e2}
+    assert e2["texto"] == "mas pra que serve esse pixel?"
+    assert e2["plano"]["destino"] == "site" and e2["plano"]["status"] == "rascunho"
     # texto fixo (Falso) tambem nao repete a mensagem anterior
     assert segunda != primeira
     assert segunda =~ "pixel"

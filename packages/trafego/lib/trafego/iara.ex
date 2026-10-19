@@ -70,50 +70,9 @@ defmodule Trafego.Iara do
     if h in 0..23 and m in 0..59, do: :io_lib.format("~2..0B:~2..0B", [h, m]) |> IO.iodata_to_binary()
   end
 
-  # ---- intencoes decidiveis (texto curto)
-  defp norm(t), do: t |> String.downcase() |> :unicode.characters_to_nfd_binary() |> String.replace(~r/\p{Mn}/u, "")
-
-  @doc "Pedido de desligar/parar as atualizacoes (nao permitido)."
-  def desligar?(texto) do
-    n = norm(texto)
-
-    String.length(n) < 160 and
-      (Regex.match?(~r/\b(desliga|desligar|desativa|desativar|cancela|cancelar|pare|parar|para de|chega de)\b.*\b(atualizac\w*|atualizar|avisos?|relatorios?|mensagens?)\b/, n) or
-         Regex.match?(~r/\b(nao quero|nao preciso|sem)\b.*\b(atualizac\w*|avisos? diarios?|relatorios?)\b/, n))
-  end
-
-  @doc "Pedido de mudar o horario das atualizacoes."
-  def mudar_horario?(texto) do
-    n = norm(texto)
-
-    String.length(n) < 160 and
-      Regex.match?(~r/\b(muda|mudar|mude|troca|trocar|troque|altera|alterar|prefiro|melhor)\b.*\b(horario|hora)\b/, n)
-  end
-
   # ---- voz (etapa 5.2.3): preferencia por audio ou texto, guardada no perfil ("voz": "audio" | "texto"; sem ela, a Iara acompanha o corretor)
   @doc "Preferencia de resposta do corretor: \"audio\" | \"texto\" | nil (acompanha: audio com audio, texto com texto)."
   def voz_preferida(tenant), do: perfil(tenant)["voz"]
-
-  @doc "Pedido explicito de como responder: :audio | :texto | nil. Texto curto; \"so texto\" / \"para de mandar audio\" = :texto."
-  def preferencia_voz(texto) do
-    n = norm(texto)
-
-    cond do
-      String.length(n) >= 120 ->
-        nil
-
-      Regex.match?(~r/\b(so|apenas|somente)\b.*\b(texto|escrito|escrever)\b/, n) or
-        Regex.match?(~r/\b(responde|responda|manda|mande|escreve|escreva|volta|voltar|prefiro|quero)\b.*\b(texto|escrito)\b/, n) or
-          Regex.match?(~r/\b(para|pare|chega|sem|nao (quero|manda|mande|precisa))\b.*\b(audio|voz)\b/, n) ->
-        :texto
-
-      Regex.match?(~r/\b(responde|responda|manda|mande|fala|fale|me responde|prefiro|quero|so|sempre)\b.*\b(audio|voz)\b/, n) ->
-        :audio
-
-      true ->
-        nil
-    end
-  end
 
   # ---- fala
   @doc """

@@ -84,8 +84,8 @@ defmodule Etapa41Test do
     assert Simulada.todas() == []
 
     # ---- confirmacao ambigua: repergunta curta, nada executa
-    assert resp(Agente.processar(ta, "hmm, talvez, nao sei ainda")) == @confirma
-    assert resp(Agente.processar(ta, "sim mas nao")) == @confirma
+    assert resp(Agente.processar(ta, "hmm, talvez, nao sei ainda")) =~ "voce confirma?"
+    assert resp(Agente.processar(ta, "sim mas nao")) =~ "voce confirma?"
     assert %{"status" => "aguardando_confirmacao", "id" => ^id1} = Plano.atual(ta)
     assert Simulada.todas() == []
 

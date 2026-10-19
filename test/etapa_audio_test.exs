@@ -114,12 +114,8 @@ defmodule EtapaAudioTest do
     assert resp(Agente.processar(t, "sim, pode ativar")) =~ "ativa"
     assert status(cid)["status"] == "ATIVA"
 
-    assert resp(Agente.receber_midia(t, audio("pausa a campanha"))) =~ ~r/pausar.*confirma/is
-    assert status(cid)["status"] == "ATIVA"
-    assert resp(Agente.receber_midia(t, audio("nao, deixa assim"))) =~ ~r/cancel/i
-    assert status(cid)["status"] == "ATIVA"
-    assert resp(Agente.receber_midia(t, audio("pausa a campanha"))) =~ "confirma"
-    assert resp(Agente.receber_midia(t, audio("sim"))) =~ ~r/paus/i
+    # 5.3: pausar e pre-autorizado (com motivo): o audio claro pausa direto, sem pedir "sim" (ativar continua exigindo)
+    assert resp(Agente.receber_midia(t, audio("pausa a campanha"))) =~ ~r/paus/i
     assert status(cid)["status"] == "PAUSADA"
   end
 
@@ -244,8 +240,8 @@ defmodule EtapaAudioTest do
     assert headers["content-type"] =~ "multipart/form-data"
     assert corpo =~ "gpt-transcribe" and corpo =~ ~r/name="language"\r\n\r\npt/ and corpo =~ ~r/filename="audio\.ogg"/
 
-    # a fala da Iara cai no texto fixo (o servidor falso so responde transcricao): o audio foi tratado como "ativa a campanha"
-    assert resp(Agente.receber_midia(t, audio("qualquer"))) =~ ~r/nao ha campanha/i
+    # 5.3: o servidor falso so responde transcricao, entao o turno da conversa falha e vem o fallback (nada alterado): o audio foi tratado como "ativa a campanha"
+    assert resp(Agente.receber_midia(t, audio("qualquer"))) =~ ~r/nada foi alterado/i
     assert [%{dados: d}] = so_audio(t)
     assert d["modelo"] == "gpt-transcribe" and d["segundos"] == 6
     assert_in_delta d["custo_brl"], 6 / 60 * 0.0045 * 5.0, 1.0e-6

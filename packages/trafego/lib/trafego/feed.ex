@@ -63,6 +63,19 @@ defmodule Trafego.Feed do
     end
   end
 
+  @doc "Imoveis para a conversa: `busca` (parte do nome, bairro ou regiao; vazio = todos), ate `limite`. {total, [imovel]}"
+  def listar(busca, limite \\ 10) do
+    busca = (busca || "") |> to_string() |> String.replace(~r/[%_\\]/, "") |> String.trim()
+    padrao = "%" <> busca <> "%"
+    onde = "fonte = $1 AND (nome ILIKE $2 OR bairro ILIKE $2 OR regiao ILIKE $2 OR id = $3)"
+    [[total]] = Banco.q("SELECT count(*) FROM feed_imoveis WHERE " <> onde, [fonte(), padrao, busca]).rows
+
+    linhas =
+      Banco.q("SELECT id FROM feed_imoveis WHERE " <> onde <> " ORDER BY nome LIMIT $4", [fonte(), padrao, busca, limite]).rows
+
+    {total, for([id] <- linhas, do: imovel(id))}
+  end
+
   @doc "Imovel pelo id ou, se nao achar, pelo nome (so se houver UM imovel com esse nome); nil se nao achar."
   def buscar(nil), do: nil
 

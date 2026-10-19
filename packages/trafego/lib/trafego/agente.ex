@@ -11,12 +11,11 @@ defmodule Trafego.Agente do
   so uma transcricao duvidosa gera uma pergunta "e isso mesmo?" antes de agir (a fala em duvida fica so em memoria).
   """
   alias Nucleo.Registro
-  alias Trafego.{Acesso, Aprendizado, Ativacao, Config, Criativo, Evento, Executor, Ficha, IA, Iara, Plano, Proposta, TetoIA, Verificador}
+  alias Trafego.{Acesso, Aprendizado, Ativacao, Config, Criativo, Evento, Executor, Conversa, Ficha, IA, Iara, Plano, Proposta, TetoIA, Verificador}
   alias Trafego.Iara.Memoria
 
   @nome "Nucleo.Automacoes.Trafego"
   @repergunta "so pra confirmar se entendi, posso fazer isso mesmo?"
-  @sem_desligar "Isso eu nao posso desligar: as atualizacoes diarias fazem parte do meu trabalho com voce. O horario voce muda quando quiser, e so falar, por exemplo, \"muda o horario para 7h\"."
   # resposta curta ao horario: mais que isso e outro assunto (vale o padrao)
   @max_resposta_horario 80
 
@@ -37,9 +36,9 @@ defmodule Trafego.Agente do
   @doc """
   Processa uma mensagem do corretor (texto, ou a transcricao de um audio). {:ok, resposta} | {:error, motivo}
   `resposta` e um texto, ou uma lista de textos curtos (o plano sai em 4 a 5 mensagens; o Laco envia uma a uma).
-  Ordem: fala de audio em duvida aguardando "e isso mesmo?"; resposta ao horario das atualizacoes; pedido de desligar/mudar o horario;
-  plano aguardando confirmacao; proposta aberta (ativar/pausar) lida em texto curto; plano em rascunho; pedido curto de
-  ativar/pausar (vira PROPOSTA); senao plano novo.
+  Ordem: fala de audio em duvida aguardando "e isso mesmo?"; resposta ao horario das atualizacoes; plano aguardando confirmacao;
+  proposta aberta (ativar/pausar); senao a CONVERSA (Trafego.Conversa: o modelo escolhe ferramentas, o codigo valida a saida).
+  Nos leitores de sim/nao, o que nao for sim nem nao vai para a conversa, que responde e retoma a confirmacao pendente.
   """
   def processar_mensagens(tenant, texto), do: seguro(tenant, "texto", fn -> gate(tenant, texto, "texto", fn -> conversa(tenant, texto, "texto") end) end)
 
@@ -77,12 +76,32 @@ defmodule Trafego.Agente do
 
     cond do
       match?(%{"status" => "aguardando_confirmacao"}, plano) -> confirmar(tenant, plano, texto)
-      match?(%{"status" => "aguardando_criativo"}, plano) and intencao(texto) == nil -> esperar_criativo(tenant, plano, texto)
-      match?(%{"status" => "erro"}, plano) and intencao(texto) == nil -> retomar(tenant, plano, texto)
-      prop != nil and curto?(texto) -> confirmar_proposta(tenant, prop, texto)
-      match?(%{"status" => "rascunho"}, plano) -> planejar(tenant, plano, texto, "complemento")
-      (tipo = intencao(texto)) != nil -> propor(tenant, tipo)
-      true -> planejar(tenant, Plano.novo(tenant), texto, "novo")
+      match?(%{"status" => "aguardando_criativo"}, plano) -> esperar_criativo(tenant, plano, texto)
+      match?(%{"status" => "erro"}, plano) -> retomar(tenant, plano, texto)
+      prop != nil -> confirmar_proposta(tenant, prop, texto)
+      true -> Conversa.responder(tenant, texto)
+    end
+  end
+
+  # a conversa respondeu o que nao era sim nem nao; a confirmacao pendente volta no fim, uma pergunta so
+  defp conversar_pendente(tenant, texto) do
+    case Conversa.responder(tenant, texto) do
+      {:ok, lista, extra} when is_list(lista) ->
+        ultima = List.last(lista)
+
+        if extra[:situacao] == :plano or String.contains?(ultima, "confirma"),
+          do: {:ok, lista, extra},
+          else: {:ok, List.replace_at(lista, -1, ultima <> retomada_pendente(tenant)), extra}
+
+      outro ->
+        outro
+    end
+  end
+
+  defp retomada_pendente(tenant) do
+    case retomada(tenant) do
+      "" -> if (p = Proposta.atual(tenant)), do: " Sobre a proposta #{p["id"]}: voce confirma?", else: ""
+      r -> r
     end
   end
 
@@ -104,25 +123,7 @@ defmodule Trafego.Agente do
     end
   end
 
-  defp continuar(tenant, texto, origem) do
-    cond do
-      (pref = Iara.preferencia_voz(texto)) != nil -> preferir_voz(tenant, pref, texto, origem)
-      Iara.desligar?(texto) -> entregar(tenant, {:ok, @sem_desligar}, texto, origem, horario: false)
-      Iara.mudar_horario?(texto) -> mudar_horario(tenant, texto, origem)
-      true -> entregar(tenant, despachar(tenant, texto), texto, origem)
-    end
-  end
-
-  # "responde em audio" / "so texto": vale dai em diante (perfil), nao muda nada nos planos
-  defp preferir_voz(tenant, :audio, texto, origem) do
-    Iara.atualizar(tenant, %{"voz" => "audio"})
-    entregar(tenant, {:ok, "Fechado, daqui pra frente te respondo por audio nas conversas. O que for pra conferir, como valores e resumo do plano, continua em texto. Se quiser so texto, e so falar."}, texto, origem, horario: false)
-  end
-
-  defp preferir_voz(tenant, :texto, texto, origem) do
-    Iara.atualizar(tenant, %{"voz" => "texto"})
-    entregar(tenant, {:ok, "Beleza, daqui pra frente so texto. Se quiser que eu volte a responder por audio, e so pedir."}, texto, origem, horario: false)
-  end
+  defp continuar(tenant, texto, origem), do: entregar(tenant, despachar(tenant, texto), texto, origem)
 
   defp padrao(tenant), do: Iara.atualizar(tenant, %{"horario" => Iara.horario_padrao(), "horario_estado" => "padrao"})
 
@@ -134,20 +135,6 @@ defmodule Trafego.Agente do
       {:ok, nil} ->
         padrao(tenant)
         continuar(tenant, texto, origem)
-
-      {:teto, info} ->
-        entregar(tenant, {:ok, TetoIA.mensagem(info)}, texto, origem, horario: false)
-    end
-  end
-
-  defp mudar_horario(tenant, texto, origem) do
-    case Iara.ler_horario(tenant, texto) do
-      {:ok, hh} when is_binary(hh) ->
-        definir_horario(tenant, hh, texto, origem)
-
-      {:ok, nil} ->
-        Iara.atualizar(tenant, %{"horario_estado" => "perguntado"})
-        entregar(tenant, {:ok, "Claro! Que horas fica melhor pra eu te atualizar todo dia? As atualizacoes eu nao consigo desligar, mas o horario e escolha sua."}, texto, origem, horario: false)
 
       {:teto, info} ->
         entregar(tenant, {:ok, TetoIA.mensagem(info)}, texto, origem, horario: false)
@@ -180,7 +167,7 @@ defmodule Trafego.Agente do
 
   # fala em duvida (audio): o corretor responde por texto OU audio; "sim" processa a fala como texto
   defp audio_pendente(tenant, fala, texto, origem) do
-    if not curto?(texto) do
+    if not resposta_curta?(texto) do
       Memoria.limpar(tenant)
       seguir(tenant, texto, origem)
     else
@@ -214,12 +201,17 @@ defmodule Trafego.Agente do
 
   # ---- voz: texto-base -> fala da Iara (primeiro contato e pergunta do horario incluidos)
   # res: {:ok, base} | {:ok, base, extra} (extra: situacao, dados, plano_id, vazio) | {:error, _}. opts: horario: false = nunca pergunta o horario
-  defp entregar(tenant, res, texto, origem, opts \\ [])
-  defp entregar(_tenant, {:error, _} = e, _, _, _), do: e
-  defp entregar(tenant, {:ok, base}, texto, origem, opts), do: entregar(tenant, {:ok, base, []}, texto, origem, opts)
+  defp entregar(tenant, res, texto, origem, opts \\ []) do
+    r = entrega(tenant, res, texto, origem, opts)
+    with {:ok, saida} <- r, do: Conversa.registrar(tenant, texto, saida)
+    r
+  end
+
+  defp entrega(_tenant, {:error, _} = e, _, _, _), do: e
+  defp entrega(tenant, {:ok, base}, texto, origem, opts), do: entrega(tenant, {:ok, base, []}, texto, origem, opts)
 
   # plano em varias mensagens curtas (texto fixo, sem IA): so a apresentacao e a pergunta do horario se juntam
-  defp entregar(tenant, {:ok, [_ | _] = lista, _extra}, _texto, _origem, opts) do
+  defp entrega(tenant, {:ok, [_ | _] = lista, _extra}, _texto, _origem, opts) do
     perfil = Iara.perfil(tenant)
     primeiro = perfil["apresentada"] != true
     perguntar = perfil["horario_estado"] == "nao_perguntado" and Keyword.get(opts, :horario, true) and ocioso?(tenant)
@@ -230,7 +222,7 @@ defmodule Trafego.Agente do
     {:ok, (if primeiro, do: Iara.apresentacao_mensagens(), else: []) ++ lista ++ if(perguntar, do: [Iara.pergunta_horario()], else: [])}
   end
 
-  defp entregar(tenant, {:ok, base, extra}, texto, origem, opts) when is_binary(base) do
+  defp entrega(tenant, {:ok, base, extra}, texto, origem, opts) when is_binary(base) do
     perfil = Iara.perfil(tenant)
     primeiro = perfil["apresentada"] != true
     nao_perguntado = perfil["horario_estado"] == "nao_perguntado"
@@ -254,52 +246,14 @@ defmodule Trafego.Agente do
     (plano == nil or plano["status"] not in ["rascunho", "aguardando_confirmacao", "aguardando_criativo", "erro"]) and Proposta.atual(tenant) == nil and Memoria.pegar(tenant) == nil
   end
 
-  # pedido de plano tem varios campos separados por ";" ou e longo: nao e resposta a uma proposta nem pedido de ativar/pausar
-  defp curto?(texto), do: String.length(texto) < 120 and not String.contains?(texto, ";")
-
-  defp intencao(texto) do
-    n = texto |> String.downcase() |> :unicode.characters_to_nfd_binary() |> String.replace(~r/\p{Mn}/u, "")
-
-    cond do
-      not curto?(texto) -> nil
-      Regex.match?(~r/\bativ(a|ar|e|em)\b/, n) -> :ativar
-      Regex.match?(~r/\bpaus(a|ar|e|em)\b/, n) -> :pausar
-      true -> nil
-    end
-  end
-
-  # ---- ativar / pausar: o agente diz o que vai fazer e pergunta; nada muda antes da confirmacao
-  defp propor(tenant, :ativar) do
-    plano = Enum.find(Enum.reverse(Plano.listar(tenant)), &(&1 && &1["status"] in ["verificado", "pausada"]))
-
-    if plano == nil do
-      {:ok, "Nao ha campanha criada e verificada para ativar. Me conta o que quer anunciar que eu monto o plano; nada foi alterado."}
-    else
-      case Ativacao.pre_condicoes(tenant, plano) do
-        [] -> abrir_proposta(tenant, plano, "ativar", %{})
-        motivos -> {:ok, "Nao posso ativar agora: #{Ativacao.explicar(motivos)}. Nada foi alterado."}
-      end
-    end
-  end
-
-  defp propor(tenant, :pausar) do
-    case Enum.find(Enum.reverse(Plano.listar(tenant)), &(&1 && &1["status"] == "ativa")) do
-      nil -> {:ok, "Nao ha campanha ativa para pausar; nada foi alterado."}
-      plano -> abrir_proposta(tenant, plano, "pausar", %{"motivo" => "pedido_do_corretor"})
-    end
-  end
-
-  defp abrir_proposta(tenant, plano, tipo, extra) do
-    prop = Proposta.aberta(tenant, tipo, plano["id"]) || Proposta.criar(tenant, tipo, plano["id"], extra)
-    Evento.emitir(tenant, "plano", plano["id"], "planejador", "proposta_" <> tipo, %{"proposta_id" => prop["id"]})
-    {:ok, Ativacao.texto(prop, plano)}
-  end
+  # resposta curta a uma pergunta do sistema (so a fala de audio em duvida usa): texto longo ou com ";" e outro assunto
+  defp resposta_curta?(texto), do: String.length(texto) < 120 and not String.contains?(texto, ";")
 
   defp confirmar_proposta(tenant, prop, texto) do
     case IA.chamar(tenant, :pequena, :confirmar, %{"texto" => texto, "plano" => prop["plano_id"], "resumo" => "proposta #{prop["tipo"]}"}) do
       {:ok, %{"decisao" => d}, uso} ->
         Evento.custo(tenant, prop["plano_id"], "planejador", "confirmar", uso)
-        decidir_proposta(tenant, prop, d)
+        decidir_proposta(tenant, prop, d, texto)
 
       {:error, {:teto_ia, info}} ->
         {:ok, TetoIA.mensagem(info)}
@@ -309,7 +263,7 @@ defmodule Trafego.Agente do
     end
   end
 
-  defp decidir_proposta(tenant, prop, "sim") do
+  defp decidir_proposta(tenant, prop, "sim", _texto) do
     Evento.emitir(tenant, "confirmacao", prop["plano_id"], "planejador", "sim", %{"proposta_id" => prop["id"]})
     Proposta.salvar(tenant, Map.put(prop, "status", "confirmado"))
 
@@ -319,15 +273,15 @@ defmodule Trafego.Agente do
     end
   end
 
-  defp decidir_proposta(tenant, prop, "nao") do
+  defp decidir_proposta(tenant, prop, "nao", _texto) do
     Evento.emitir(tenant, "confirmacao", prop["plano_id"], "planejador", "nao", %{"proposta_id" => prop["id"]})
     Proposta.salvar(tenant, Map.put(prop, "status", "recusada"))
     {:ok, "Ok, cancelei a proposta #{prop["id"]}; nada foi alterado."}
   end
 
-  defp decidir_proposta(tenant, prop, _) do
+  defp decidir_proposta(tenant, prop, _, texto) do
     Evento.emitir(tenant, "confirmacao", prop["plano_id"], "planejador", "ambigua", %{"proposta_id" => prop["id"]})
-    {:ok, @repergunta}
+    conversar_pendente(tenant, texto)
   end
 
   @doc """
@@ -498,6 +452,10 @@ defmodule Trafego.Agente do
   end
 
   # ---- planejador
+  @doc false
+  # porta da ferramenta `planejar` da conversa: o mesmo planejador de sempre (IA :planejar + Ficha)
+  def planejar_pedido(tenant, plano, texto, ref), do: planejar(tenant, plano, texto, ref)
+
   defp planejar(tenant, plano, texto, ref) do
     Plano.definir_atual(tenant, plano["id"])
     Evento.emitir(tenant, "pedido", plano["id"], "planejador", ref)
@@ -595,7 +553,7 @@ defmodule Trafego.Agente do
 
       {:ok, _, uso} ->
         Evento.custo(tenant, plano["id"], "planejador", "confirmar", uso)
-        {:ok, lembrete_criativo(plano)}
+        conversar_pendente(tenant, texto)
 
       {:error, {:teto_ia, info}} ->
         {:ok, TetoIA.mensagem(info)}
@@ -613,7 +571,13 @@ defmodule Trafego.Agente do
       {:ok, %{"decisao" => d}, uso} ->
         Evento.custo(tenant, plano["id"], "planejador", "confirmar", uso)
         # pedido de mudanca em linguagem natural: ajusta so o que ele disse e reenvia so as mensagens afetadas
-        if d == "ajuste", do: planejar(tenant, plano, texto, "ajuste"), else: decidir(tenant, plano, d)
+        cond do
+          d == "ajuste" -> planejar(tenant, plano, texto, "ajuste")
+          d in ["sim", "nao"] -> decidir(tenant, plano, d)
+          true ->
+            Evento.emitir(tenant, "confirmacao", plano["id"], "planejador", "ambigua")
+            conversar_pendente(tenant, texto)
+        end
 
       {:error, {:teto_ia, info}} ->
         {:ok, TetoIA.mensagem(info)}
@@ -646,11 +610,6 @@ defmodule Trafego.Agente do
     Plano.salvar(tenant, Map.put(plano, "status", "recusado"))
     Plano.definir_atual(tenant, nil)
     {:ok, "Ok, cancelei o plano #{plano["id"]}; nada foi alterado."}
-  end
-
-  defp decidir(tenant, plano, _) do
-    Evento.emitir(tenant, "confirmacao", plano["id"], "planejador", "ambigua")
-    {:ok, repergunta(plano)}
   end
 
   defp executar_plano(tenant, plano) do
