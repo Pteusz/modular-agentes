@@ -6,9 +6,12 @@ defmodule Trafego.Acesso do
   Status da credencial: "ok" | "token invalido" (a plataforma recusou o token; nenhuma chamada sai ate recadastrar).
   """
   alias Nucleo.Registro
-  alias Trafego.{Cifra, Evento, Plataforma}
+  require Logger
+  alias Trafego.{Cache, Cifra, Evento, Plataforma}
 
-  @ops ~w(criar_campanha ler_campanha editar_campanha pausar_campanha ativar_campanha listar_campanhas metricas numeros_vinculados)a
+  @ops ~w(criar_campanha ler_campanha editar_campanha pausar_campanha ativar_campanha listar_campanhas listar_campanhas_com_metricas metricas numeros_vinculados)a
+  # escrevem na plataforma: o cache do painel do tenant e esquecido depois (qualquer que seja o resultado: uma falha parcial tambem muda a conta)
+  @escritas ~w(criar_campanha editar_campanha pausar_campanha ativar_campanha)a
   @campos ~w(conta_id pagina_id instagram_id pixel_id)
 
   def conta(tenant), do: Registro.ler(tenant, "trafego_conta")
@@ -46,6 +49,7 @@ defmodule Trafego.Acesso do
         |> Map.reject(fn {_, v} -> is_nil(v) end)
 
       Registro.gravar(tenant, "trafego_conta", registro)
+      Cache.invalidar(tenant)
       {:ok, cred["conta_id"]}
     end
   end
@@ -67,11 +71,25 @@ defmodule Trafego.Acesso do
           true ->
             with {:ok, tk} <- token(tenant, c) do
               cred = c |> Map.take(@campos ++ ["moeda"]) |> Map.put("token", tk)
-              apply(Plataforma.adaptador(), op, [cred | args]) |> marcar(tenant, c, op)
+              medir(tenant, op, fn -> apply(Plataforma.adaptador(), op, [cred | args]) end) |> marcar(tenant, c, op)
             end
         end
     end
   end
+
+  # medicao: uma linha por chamada a plataforma (so metadados: tenant, operacao, ms, resultado; nunca token nem conta)
+  defp medir(tenant, op, fun) do
+    t0 = System.monotonic_time(:millisecond)
+    r = fun.()
+    if op in @escritas, do: Cache.invalidar(tenant)
+    Logger.info("trafego.plataforma tenant=#{tenant} op=#{op} ms=#{System.monotonic_time(:millisecond) - t0} resultado=#{resultado(r)}")
+    r
+  end
+
+  defp resultado({:ok, _}), do: "ok"
+  defp resultado({:error, e}) when is_atom(e), do: e
+  defp resultado({:error, {k, _}}) when is_atom(k), do: k
+  defp resultado(_), do: "erro"
 
   defp token(tenant, %{"token_cifrado" => env}), do: Cifra.decifrar(tenant, env)
   # registros da 4.1 (credencial simulada em claro) continuam legiveis
@@ -80,6 +98,7 @@ defmodule Trafego.Acesso do
 
   defp marcar({:error, :token_invalido} = r, tenant, c, op) do
     Registro.gravar(tenant, "trafego_conta", Map.put(c, "status", "token invalido"))
+    Cache.invalidar(tenant)
     Evento.emitir(tenant, "operacao", nil, "executor", to_string(op), %{"erro" => "token_invalido"})
     r
   end

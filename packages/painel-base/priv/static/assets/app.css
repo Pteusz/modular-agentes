@@ -133,3 +133,8 @@ a.botao { display: inline-block; text-decoration: none; }
   .principal a.ativo { font-weight: 700; color: var(--cobalto); box-shadow: inset 0 -3px 0 var(--cobalto); border-radius: 0; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.atualizando { font-size: .8rem; font-weight: 400; color: var(--apoio, #5b6470); margin-left: .5rem; }
+.esqueleto .linha { display: block; height: .9rem; margin: .5rem 0; border-radius: 4px; background: var(--linha); animation: pulsa 1.2s ease-in-out infinite; }
+.esqueleto .linha.curta { width: 45%; }
+@keyframes pulsa { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .esqueleto .linha { animation: none; } }

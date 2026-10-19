@@ -28,6 +28,7 @@ defmodule Etapa43Test do
   use ExUnit.Case
   import Phoenix.ConnTest
   import Plug.Conn
+  import Phoenix.LiveViewTest, only: [live: 2, render_async: 1]
   import ExUnit.CaptureLog
   alias Nucleo.{Canal, Conexao, Laco, Registro, Vincular}
   alias Nucleo.Automacoes.PainelBase, as: ContratoPainel
@@ -42,6 +43,8 @@ defmodule Etapa43Test do
   @pedido "pedido destino site; url https://corretor.com.br/lancamento; pixel 998877; publico %s; criativo foto1.png | Apartamento novo; " <>
             "diario R$ 50; teto R$ 500; janela 2026-11-01 2026-11-30; meta 20; custo_max R$ 15; observacao SEGREDO-PRIVADO-777"
 
+  # /campanhas abre a casca na hora e as linhas chegam em segundo plano (5.4): o teste espera o carregamento
+  defp campanhas_html(sessao), do: (assert {:ok, v, _} = live(sessao, "/campanhas"); render_async(v))
   defp png(w, h),
     do: (fn b -> b <> :binary.copy(<<0>>, 64) end).(<<137, 80, 78, 71, 13, 10, 26, 10, 13::32, "IHDR", w::32, h::32, 8, 2, 0, 0, 0, 0::32>>)
 
@@ -203,12 +206,12 @@ defmodule Etapa43Test do
     for rotulo <- ~w(Início Campanhas Agente Conta), do: assert(inicio =~ rotulo)
     assert inicio =~ "viewport" and inicio =~ "modular agentes"
 
-    pa = get(sa, "/campanhas") |> html_response(200)
+    pa = campanhas_html(sa)
     assert pa =~ "Lancamento Zona Sul A" and pa =~ "Pausada"
     assert pa =~ "R$ 45,60" and pa =~ "12.000" and pa =~ "340" and pa =~ "R$ 3,80" and pa =~ "7 dias"
     refute pa =~ "Reforma Centro B" or pa =~ "999,00" or pa =~ "777.000"
 
-    pb = get(sb, "/campanhas") |> html_response(200)
+    pb = campanhas_html(sb)
     assert pb =~ "Reforma Centro B" and pb =~ "R$ 999,00" and pb =~ "777.000"
     refute pb =~ "Lancamento Zona Sul A" or pb =~ "45,60"
 

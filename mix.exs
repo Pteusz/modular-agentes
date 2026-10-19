@@ -10,7 +10,7 @@ defmodule Projeto.MixProject do
       version: "0.1.0",
       elixir: "~> 1.19",
       test_pattern: "etapa[123456]*_test.exs",
-      deps: [{:nucleo, path: "packages/nucleo"}, {:eco, path: "packages/eco"}, {:trafego, path: "packages/trafego"}, {:painel_base, path: "packages/painel-base"}, {:gestao_equipe, path: "packages/gestao-equipe"}]
+      deps: [{:nucleo, path: "packages/nucleo"}, {:eco, path: "packages/eco"}, {:trafego, path: "packages/trafego"}, {:painel_base, path: "packages/painel-base"}, {:gestao_equipe, path: "packages/gestao-equipe"}, {:lazy_html, ">= 0.1.0", only: :test}]
     ]
 
   def application, do: [extra_applications: [:logger]]

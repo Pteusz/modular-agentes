@@ -78,29 +78,80 @@ defmodule Trafego.Plataforma.Meta do
 
   @impl true
   def listar_campanhas(cred) do
-    with {:ok, %{"data" => dados}} <- get(cred, conta_id(cred["conta_id"]) <> "/campaigns", fields: "id,name,status", limit: 100) do
+    with {:ok, %{"data" => dados}} <- get(cred, conta_id(cred["conta_id"]) <> "/campaigns", [fields: "id,name,status", limit: 100], leitura()) do
       {:ok, for(c <- dados, do: %{"id" => c["id"], "nome" => c["name"], "status" => status(c["status"]), "conta_id" => conta_id(cred["conta_id"])})}
     end
   end
 
+  @campos_insights "campaign_id,spend,reach,clicks,actions"
+  @max_paginas 10
+
   @impl true
   def metricas(cred, id, dias) do
-    fim = Date.utc_today()
-    janela = Jason.encode!(%{"since" => Date.to_iso8601(Date.add(fim, -(dias - 1))), "until" => Date.to_iso8601(fim)})
-
+    # acesso por id isolado: a checagem de conta (get_da_conta) continua
     with {:ok, _} <- get_da_conta(cred, id),
-         {:ok, r} <- get(cred, id <> "/insights", fields: "spend,reach,clicks,actions", time_range: janela, level: "campaign") do
-      linha = r |> Map.get("data", []) |> List.first() || %{}
-      acoes = for %{"action_type" => t, "value" => v} <- linha["actions"] || [], into: %{}, do: {t, inteiro(v) || 0}
-      msgs = acoes["onsite_conversion.messaging_conversation_started_7d"] || 0
-      leads = (acoes["lead"] || 0) + (acoes["offsite_conversion.fb_pixel_lead"] || 0)
-
-      {:ok,
-       %{
-         "gasto" => reais_em_centavos(linha["spend"]), "alcance" => inteiro(linha["reach"]) || 0, "cliques" => inteiro(linha["clicks"]) || 0,
-         "mensagens_iniciadas" => msgs, "resultados" => msgs + leads
-       }}
+         {:ok, r} <- get(cred, id <> "/insights", [fields: @campos_insights, time_range: janela(dias), level: "campaign"], leitura()) do
+      {:ok, r |> Map.get("data", []) |> List.first() |> metricas_da_linha()}
     end
+  end
+
+  # Lote (painel rapido): a listagem + UM insights da conta com level=campaign casado por campaign_id = 2 chamadas, qualquer que seja
+  # o numero de campanhas (antes: 1 + 2N). Os ids vem da propria conta, entao nao ha get_da_conta por campanha. O numero e o mesmo de
+  # metricas/3 (mesma funcao de linha; campanha sem linha no insights = zeros). Se so o insights falhar, as campanhas voltam SEM a
+  # chave "metricas" e o chamador cai no caminho antigo; erro de token passa como erro.
+  @impl true
+  def listar_campanhas_com_metricas(cred, dias) do
+    conta = conta_id(cred["conta_id"])
+
+    with {:ok, lista} <- listar_campanhas(cred) do
+      case insights_da_conta(cred, conta, dias) do
+        {:ok, linhas} ->
+          por_id = Map.new(linhas, &{&1["campaign_id"], &1})
+          {:ok, for(c <- lista, do: Map.put(c, "metricas", metricas_da_linha(por_id[c["id"]])))}
+
+        {:error, :token_invalido} = e ->
+          e
+
+        {:error, _} ->
+          {:ok, lista}
+      end
+    end
+  end
+
+  defp insights_da_conta(cred, conta, dias), do: paginar(cred, conta <> "/insights", [fields: @campos_insights, time_range: janela(dias), level: "campaign", limit: 500], [], @max_paginas)
+
+  defp paginar(_cred, _caminho, _params, acc, 0), do: {:ok, acc}
+
+  defp paginar(cred, caminho, params, acc, restantes) do
+    with {:ok, r} <- get(cred, caminho, params, leitura()) do
+      acc = acc ++ (r["data"] || [])
+
+      paging = r["paging"] || %{}
+
+      case get_in(paging, ["cursors", "after"]) do
+        depois when is_binary(depois) and is_map_key(paging, "next") -> paginar(cred, caminho, Keyword.put(params, :after, depois), acc, restantes - 1)
+        _ -> {:ok, acc}
+      end
+    end
+  end
+
+  defp leitura, do: [receive_timeout: Config.meta(:timeout_leitura, 8_000)]
+
+  defp janela(dias) do
+    fim = Date.utc_today()
+    Jason.encode!(%{"since" => Date.to_iso8601(Date.add(fim, -(dias - 1))), "until" => Date.to_iso8601(fim)})
+  end
+
+  defp metricas_da_linha(linha) do
+    linha = linha || %{}
+    acoes = for %{"action_type" => t, "value" => v} <- linha["actions"] || [], into: %{}, do: {t, inteiro(v) || 0}
+    msgs = acoes["onsite_conversion.messaging_conversation_started_7d"] || 0
+    leads = (acoes["lead"] || 0) + (acoes["offsite_conversion.fb_pixel_lead"] || 0)
+
+    %{
+      "gasto" => reais_em_centavos(linha["spend"]), "alcance" => inteiro(linha["reach"]) || 0, "cliques" => inteiro(linha["clicks"]) || 0,
+      "mensagens_iniciadas" => msgs, "resultados" => msgs + leads
+    }
   end
 
   defp reais_em_centavos(nil), do: 0
@@ -388,7 +439,7 @@ defmodule Trafego.Plataforma.Meta do
   defp conta_id("act_" <> _ = c), do: c
   defp conta_id(c), do: "act_" <> to_string(c)
 
-  defp get(cred, caminho, params), do: pedir(cred, :get, caminho, params: params)
+  defp get(cred, caminho, params, extra \\ []), do: pedir(cred, :get, caminho, [params: params] ++ extra)
   defp post(cred, caminho, opcoes), do: pedir(cred, :post, caminho, opcoes)
 
   # a Graph responde JSON com content-type text/javascript: o Req nao decodifica, entao decodificamos aqui
@@ -418,6 +469,7 @@ defmodule Trafego.Plataforma.Meta do
       {:ok, %{body: %{"error" => %{"code" => c} = e}}} -> {:error, {:graph, c, String.slice(detalhe(e), 0, 200)}}
       {:ok, %{status: 401}} -> {:error, :token_invalido}
       {:ok, %{status: s}} -> {:error, {:http, s}}
+      {:error, %{reason: :timeout}} -> {:error, :timeout}
       {:error, ex} -> {:error, {:rede, ex |> Exception.message() |> String.slice(0, 120)}}
     end
   end

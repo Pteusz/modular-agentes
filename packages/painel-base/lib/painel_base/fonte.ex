@@ -12,6 +12,24 @@ defmodule PainelBase.Fonte do
   def atividade(tenant), do: mod().atividade(tenant)
   def conta(tenant), do: mod().conta(tenant)
 
+  # Leitura rapida (opcional na fonte): o painel abre com o que ja foi guardado e atualiza em segundo plano.
+  @doc "Ultima foto guardada da home (sem tocar na plataforma) ou nil."
+  def foto(tenant), do: if(exporta?(:foto, 1), do: mod().foto(tenant))
+
+  @doc "Atualiza a foto da home (pode usar cache curto). {:ok, foto} | {:error, motivo}"
+  def atualizar_resumo(tenant) do
+    if exporta?(:atualizar_resumo, 1) do
+      mod().atualizar_resumo(tenant)
+    else
+      with {:ok, lista} <- campanhas(tenant), do: {:ok, %{"campanhas_total" => length(lista)}}
+    end
+  end
+
+  @doc "Campanhas ja em cache fresco ({:ok, lista}) ou :miss; nunca toca na plataforma."
+  def campanhas_em_cache(tenant), do: if(exporta?(:campanhas_em_cache, 1), do: mod().campanhas_em_cache(tenant), else: :miss)
+
+  defp exporta?(f, a), do: Code.ensure_loaded?(mod()) and function_exported?(mod(), f, a)
+
   @doc "Cadastro manual da conta de anuncios (oferta trafego.painel 1.1): valida na plataforma e guarda cifrado. {:ok, _} | {:error, motivo}"
   def cadastrar_conta(tenant, cred), do: mod().cadastrar_conta(tenant, cred)
 

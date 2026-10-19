@@ -4,18 +4,34 @@ defmodule PainelBase.InicioLive do
   alias Nucleo.Conexao
   alias PainelBase.{Formato, Fonte}
 
+  # A casca nao espera a plataforma: mostra a ultima foto guardada e atualiza em segundo plano (so com a conexao ao vivo).
   def mount(_p, _s, socket) do
     t = socket.assigns.usuario.tenant_id
-    campanhas = case Fonte.campanhas(t) do {:ok, l} -> l; _ -> nil end
+    conectada = Fonte.conta(t) != nil
+    foto = if conectada, do: Fonte.foto(t)
+    ao_vivo = conectada and connected?(socket)
 
     {:ok,
-     assign(socket,
+     socket
+     |> assign(
        ativo: :inicio,
        plano: Fonte.plano_aguardando(t),
-       campanhas: campanhas,
+       conectada: conectada,
+       total: foto && foto["campanhas_total"],
+       atualizando: ao_vivo,
+       falhou: false,
        canal: Formato.canal(Conexao.estado(t))
-     )}
+     )
+     |> then(fn s -> if ao_vivo, do: start_async(s, :resumo, fn -> Fonte.atualizar_resumo(t) end), else: s end)}
   end
+
+  def handle_async(:resumo, {:ok, {:ok, foto}}, socket) do
+    # erro da plataforma (foto com "erro" ou sem total) mantem os ultimos numeros
+    total = if foto["erro"], do: nil, else: foto["campanhas_total"]
+    {:noreply, assign(socket, atualizando: false, falhou: total == nil and socket.assigns.total == nil, total: total || socket.assigns.total)}
+  end
+
+  def handle_async(:resumo, _falha, socket), do: {:noreply, assign(socket, atualizando: false, falhou: socket.assigns.total == nil)}
 
   def render(assigns) do
     ~H"""
@@ -25,10 +41,12 @@ defmodule PainelBase.InicioLive do
       <p :if={@plano}><span class="simbolo" aria-hidden="true">…</span> Há um plano aguardando sua resposta no WhatsApp. <.link navigate="/agente">Ver o plano</.link></p>
       <p :if={!@plano}><span class="simbolo" aria-hidden="true">✓</span> Nenhum plano aguardando.</p>
     </section>
-    <section class="cartao">
-      <h2>Campanhas</h2>
-      <p :if={@campanhas}>{length(@campanhas)} na sua conta. <.link navigate="/campanhas">Ver campanhas</.link></p>
-      <p :if={!@campanhas}>Conta de anúncios ainda não conectada.</p>
+    <section class="cartao" id="resumo-campanhas">
+      <h2>Campanhas <span :if={@atualizando} class="atualizando" role="status">atualizando…</span></h2>
+      <p :if={@total}>{@total} na sua conta. <.link navigate="/campanhas">Ver campanhas</.link></p>
+      <p :if={@conectada and !@total and !@falhou}>Carregando… <.link navigate="/campanhas">Ver campanhas</.link></p>
+      <p :if={@conectada and @falhou}>Não foi possível ler as campanhas agora. <.link navigate="/campanhas">Ver campanhas</.link></p>
+      <p :if={!@conectada}>Conta de anúncios ainda não conectada.</p>
     </section>
     <section class="cartao">
       <h2>WhatsApp</h2>
@@ -43,15 +61,32 @@ defmodule PainelBase.CampanhasLive do
   import PainelBase.Componentes
   alias PainelBase.Fonte
 
+  # Casca na hora; as linhas chegam em segundo plano (ou direto, se o cache curto estiver fresco).
   def mount(_p, _s, socket) do
-    resposta = Fonte.campanhas(socket.assigns.usuario.tenant_id)
-    {:ok, assign(socket, ativo: :campanhas, resposta: resposta)}
+    t = socket.assigns.usuario.tenant_id
+
+    case Fonte.campanhas_em_cache(t) do
+      {:ok, lista} ->
+        {:ok, assign(socket, ativo: :campanhas, resposta: {:ok, lista})}
+
+      _ ->
+        socket = assign(socket, ativo: :campanhas, resposta: :carregando)
+        {:ok, if(connected?(socket), do: start_async(socket, :campanhas, fn -> Fonte.campanhas(t) end), else: socket)}
+    end
   end
+
+  def handle_async(:campanhas, {:ok, resposta}, socket), do: {:noreply, assign(socket, resposta: resposta)}
+  def handle_async(:campanhas, _falha, socket), do: {:noreply, assign(socket, resposta: {:error, :falha})}
 
   def render(assigns) do
     ~H"""
     <h1>Campanhas</h1>
     <%= case @resposta do %>
+      <% :carregando -> %>
+        <div id="carregando" aria-busy="true" aria-live="polite">
+          <p class="apoio">Carregando campanhas…</p>
+          <section :for={_ <- 1..3} class="cartao esqueleto" aria-hidden="true"><span class="linha"></span><span class="linha curta"></span></section>
+        </div>
       <% {:ok, []} -> %>
         <p class="apoio">Nenhuma campanha ainda. Peça ao agente pelo WhatsApp.</p>
       <% {:ok, lista} -> %>
@@ -60,6 +95,8 @@ defmodule PainelBase.CampanhasLive do
           <p><.estado status={c["status"]} /></p>
           <.metricas m={c["metricas"]} cpr={c["custo_por_resultado"]} dias={c["dias"]} />
         </section>
+      <% {:error, :timeout} -> %>
+        <p class="aviso erro" role="alert"><span class="simbolo" aria-hidden="true">✕</span> A Meta demorou a responder. Tente de novo em instantes.</p>
       <% _ -> %>
         <p class="aviso erro" role="alert"><span class="simbolo" aria-hidden="true">✕</span> Não foi possível ler as campanhas agora. Verifique a conta de anúncios em Conta.</p>
     <% end %>

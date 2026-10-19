@@ -24,6 +24,7 @@ defmodule Trafego.Equipe do
 
   @doc "Remove a conta e a foto de sincronizacao do tenant (todas as versoes). Nada na plataforma e tocado."
   def remover_conta(tenant) do
+    Trafego.Cache.invalidar(tenant)
     Registro.apagar_chave(tenant, "trafego_conta")
     Registro.apagar_chave(tenant, @chave_sync)
   end
@@ -53,8 +54,21 @@ defmodule Trafego.Equipe do
     end
   end
 
-  @doc "Le a plataforma agora e guarda a foto. {:ok, resumo}; sem conta ou com erro, o resumo traz o motivo em \"erro\"."
-  def sincronizar(tenant) do
+  @doc "Ultima foto guardada (sem tocar na plataforma) com o status atual do token, ou nil se nunca sincronizou."
+  def foto(tenant) do
+    case Registro.ler(tenant, @chave_sync) do
+      %{"sincronizado_em" => _} = foto -> com_token(tenant, foto)
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Le a plataforma e guarda a foto. {:ok, resumo}; sem conta ou com erro, o resumo traz o motivo em "erro".
+  `fresco: false` aceita o cache curto de campanhas (padrao true = le agora).
+  """
+  def sincronizar(tenant), do: sincronizar(tenant, [])
+
+  def sincronizar(tenant, opts) do
     # com erro da plataforma (token caiu, fora do ar) valem os ultimos numeros conhecidos: o painel nao zera de repente
     anterior = Registro.ler(tenant, @chave_sync) || %{}
     zero = %{"campanhas_ativas" => 0, "reprovadas" => 0, "gasto" => 0}
@@ -65,11 +79,12 @@ defmodule Trafego.Equipe do
         nil ->
           base
         _ ->
-          case Painel.campanhas(tenant) do
+          case Painel.campanhas(tenant, Painel.dias_padrao(), fresco: Keyword.get(opts, :fresco, true)) do
             {:ok, lista} ->
               Map.merge(Map.merge(base, zero), %{
                 "campanhas_ativas" => Enum.count(lista, &(estado(&1) in @ativas)),
                 "reprovadas" => Enum.count(lista, &(estado(&1) in @reprovadas)),
+                "campanhas_total" => length(lista),
                 "gasto" => lista |> Enum.map(&(get_in(&1, ["metricas", "gasto"]) || 0)) |> Enum.sum()
               })
 
