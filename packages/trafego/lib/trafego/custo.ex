@@ -22,6 +22,23 @@ defmodule Trafego.Custo do
     end
   end
 
+  @doc """
+  Custo em R$ da transcricao de `segundos` de audio. Modelo real: US$ por minuto (:preco_usd_por_minuto) x cotacao (nil sem cotacao,
+  nunca inventado). Modelo de teste: :preco_brl_por_min (R$ por minuto).
+  """
+  def brl_audio(modelo, segundos) do
+    case Map.fetch(Config.preco_usd_por_minuto(), modelo) do
+      {:ok, usd_min} ->
+        case cotacao() do
+          nil -> nil
+          {cotacao, _data} -> Float.round(usd_min * segundos / 60 * cotacao, 6)
+        end
+
+      :error ->
+        Float.round(Map.get(Application.get_env(:trafego, :preco_brl_por_min, %{}), modelo, 0.02) * segundos / 60, 6)
+    end
+  end
+
   @doc "{valor, data | nil} da cotacao em uso (data so quando vem da PTAX), ou nil."
   def cotacao do
     cond do
@@ -33,7 +50,7 @@ defmodule Trafego.Custo do
   end
 
   @doc "Cotacao usada para um modelo (nil se o modelo nao e cobrado em USD)."
-  def cotacao_usada(modelo), do: if(Map.has_key?(Config.preco_usd_por_milhao(), modelo), do: cotacao())
+  def cotacao_usada(modelo), do: if(Map.has_key?(Config.preco_usd_por_milhao(), modelo) or Map.has_key?(Config.preco_usd_por_minuto(), modelo), do: cotacao())
 
   @doc "Provedor real sem cotacao: o custo nao seria contado, entao o teto de IA falha fechado."
   def cotacao_ausente? do

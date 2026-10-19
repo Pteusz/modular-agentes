@@ -11,11 +11,18 @@ defmodule Trafego.IA do
 
   def provedor, do: Application.get_env(:trafego, :provedor_ia, Trafego.IA.Falso)
 
+  @callback transcrever(bytes :: binary, meta :: %{mime: String.t(), segundos: pos_integer}) :: {:ok, texto :: String.t(), uso :: map} | {:error, term}
+
   @doc "Chamada com teto: {:ok, saida, uso} | {:error, {:teto_ia, info}} (sem chamar o provedor) | {:error, outro}"
-  def chamar(tenant, faixa, tarefa, entrada) do
+  def chamar(tenant, faixa, tarefa, entrada), do: com_teto(tenant, plano_id(entrada), fn -> provedor().chamar(faixa, tarefa, entrada) end)
+
+  @doc "Transcricao de audio com o mesmo teto de custo da IA: {:ok, texto, uso} | {:error, {:teto_ia, info}} | {:error, outro}. Uso: %{modelo, segundos}."
+  def transcrever(tenant, bytes, meta), do: com_teto(tenant, nil, fn -> provedor().transcrever(bytes, meta) end)
+
+  defp com_teto(tenant, plano_id, f) do
     case TetoIA.status(tenant) do
       {:bloqueado, info} ->
-        Evento.emitir(tenant, "operacao", plano_id(entrada), "planejador", "teto_ia_bloqueado", %{"gasto_brl" => info[:gasto], "teto_brl" => info[:teto]})
+        Evento.emitir(tenant, "operacao", plano_id, "planejador", "teto_ia_bloqueado", %{"gasto_brl" => info[:gasto], "teto_brl" => info[:teto]})
         if TetoIA.primeira_vez?(tenant, "bloqueio"), do: Notificar.enviar(tenant, TetoIA.mensagem(info))
         {:error, {:teto_ia, info}}
 
@@ -23,10 +30,10 @@ defmodule Trafego.IA do
         if TetoIA.primeira_vez?(tenant, "aviso"),
           do: Notificar.enviar(tenant, "Aviso: o custo de IA do mes chegou a #{TetoIA.brl(g)} de #{TetoIA.brl(t)} (teto de IA). Ao chegar no teto eu paro de interpretar mensagens, sem alterar nada.")
 
-        provedor().chamar(faixa, tarefa, entrada)
+        f.()
 
       :ok ->
-        provedor().chamar(faixa, tarefa, entrada)
+        f.()
     end
   end
 

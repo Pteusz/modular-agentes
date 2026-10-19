@@ -23,6 +23,53 @@ defmodule Trafego.IA.OpenAI do
     end
   end
 
+  @doc """
+  Transcricao (v1/audio/transcriptions, multipart). Modelo e idioma de config (:openai, :transcricao). Os bytes so existem em memoria.
+  Uso devolvido: %{modelo, segundos} (duracao informada pela API quando vem; senao a do WhatsApp).
+  """
+  @impl true
+  def transcrever(bytes, %{mime: mime, segundos: segundos}) do
+    cfg = Config.openai(:transcricao, [])
+    modelo = Keyword.get(cfg, :modelo, "gpt-transcribe")
+
+    with {:ok, chave} <- chave(),
+         {:ok, corpo} <- pedir_audio(chave, modelo, Keyword.get(cfg, :idioma, "pt"), bytes, mime),
+         %{"text" => texto} when is_binary(texto) <- corpo do
+      seg = get_in(corpo, ["usage", "seconds"])
+      {:ok, texto, %{"modelo" => modelo, "segundos" => if(is_number(seg) and seg > 0, do: ceil(seg), else: segundos)}}
+    else
+      {:error, _} = e -> e
+      _ -> {:error, :resposta_inesperada}
+    end
+  end
+
+  defp pedir_audio(chave, modelo, idioma, bytes, mime) do
+    url = Config.openai(:base_url, "https://api.openai.com") <> "/v1/audio/transcriptions"
+    {ext, tipo} = formato(mime)
+
+    campos = [file: {bytes, filename: "audio." <> ext, content_type: tipo}, model: modelo, language: idioma, response_format: "json"]
+
+    case Req.request(method: :post, url: url, form_multipart: campos, headers: [{"authorization", "Bearer " <> chave}], retry: false, receive_timeout: Config.openai(:timeout, 60_000)) do
+      {:ok, %{status: 200, body: b}} when is_map(b) -> {:ok, b}
+      {:ok, %{status: s}} -> {:error, {:http, s}}
+      {:error, ex} -> {:error, {:rede, ex |> Exception.message() |> String.slice(0, 120)}}
+    end
+  end
+
+  # extensao e content-type pelo mime do WhatsApp (nota de voz = audio/ogg; codecs=opus)
+  defp formato(mime) do
+    m = (mime || "") |> String.downcase()
+
+    cond do
+      m =~ "ogg" or m =~ "opus" -> {"ogg", "audio/ogg"}
+      m =~ "mpeg" or m =~ "mp3" -> {"mp3", "audio/mpeg"}
+      m =~ "mp4" or m =~ "m4a" or m =~ "aac" -> {"m4a", "audio/mp4"}
+      m =~ "wav" -> {"wav", "audio/wav"}
+      m =~ "webm" -> {"webm", "audio/webm"}
+      true -> {"ogg", "audio/ogg"}
+    end
+  end
+
   defp chave do
     case Config.openai_chave() do
       c when is_binary(c) and c != "" -> {:ok, c}

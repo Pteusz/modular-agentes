@@ -12,6 +12,11 @@ defmodule Trafego.Config do
   def openai, do: Application.get_env(:trafego, :openai, [])
   def openai(chave, padrao \\ nil), do: Keyword.get(openai(), chave, padrao)
 
+  def audio(chave, padrao \\ nil), do: Application.get_env(:trafego, :audio, []) |> Keyword.get(chave, padrao)
+
+  @doc "Tabela de precos de transcricao em USD por minuto: %{modelo => preco}."
+  def preco_usd_por_minuto, do: Application.get_env(:trafego, :preco_usd_por_minuto, %{})
+
   def openai_chave, do: System.get_env("OPENAI_API_KEY")
 
   def criativo(chave, padrao \\ nil), do: Application.get_env(:trafego, :criativo, []) |> Keyword.get(chave, padrao)
