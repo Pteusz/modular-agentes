@@ -111,12 +111,32 @@ defmodule PainelBase.ContaLive do
   use Phoenix.LiveView
   import PainelBase.Layouts, only: [csrf: 1]
   alias Nucleo.Conexao
-  alias PainelBase.{Formato, Fonte}
+  alias PainelBase.{Conta, Formato, Fonte}
 
-  def mount(_p, _s, socket) do
+  @avisos %{"anuncios_salvo" => "Conta de anúncios salva.", "anuncios_removido" => "Conta de anúncios removida."}
+  @erros %{
+    "invalido_token" => "O token parece inválido (use o token de acesso, sem espaços).",
+    "invalido_conta_id" => "O ID da conta de anúncios deve ter só números (pode começar com act_).",
+    "invalido_pagina_id" => "O ID da página é obrigatório e deve ter só números.",
+    "invalido_instagram_id" => "O ID do Instagram deve ter só números (ou fique em branco).",
+    "token_invalido" => "A plataforma recusou o token.",
+    "credencial_invalida" => "A plataforma recusou as credenciais informadas.",
+    "inacessivel_conta" => "Esse token não alcança essa conta de anúncios.",
+    "inacessivel_pagina" => "Esse token não alcança essa página.",
+    "inacessivel_instagram" => "Esse token não alcança esse Instagram.",
+    "sem_chave_de_cifra" => "Não foi possível guardar com segurança (chave de cifra ausente).",
+    "trafego_indisponivel" => "O módulo de anúncios não está disponível agora.",
+    "erro" => "Não foi possível salvar. Confira os dados e tente de novo."
+  }
+
+  def mount(params, _s, socket) do
     t = socket.assigns.usuario.tenant_id
     if connected?(socket), do: Conexao.assinar(t)
-    {:ok, socket |> assign(ativo: :conta, anuncios: Fonte.conta(t)) |> estado(Conexao.estado(t))}
+
+    {:ok,
+     socket
+     |> assign(ativo: :conta, anuncios: Fonte.conta(t), aviso: @avisos[params["aviso"]], erro: @erros[params["erro"]], erro_whatsapp: nil)
+     |> estado(Conexao.estado(t))}
   end
 
   def handle_info({:canal_estado, t, e}, socket) do
@@ -126,15 +146,17 @@ defmodule PainelBase.ContaLive do
 
   def handle_info(_, socket), do: {:noreply, socket}
 
-  def handle_event("conectar", _, socket) do
-    Conexao.conectar(socket.assigns.usuario.tenant_id)
-    {:noreply, socket}
-  end
+  def handle_event("conectar", _, socket), do: {:noreply, resultado(socket, Conta.conectar(socket.assigns.usuario))}
+  def handle_event("reconectar", _, socket), do: {:noreply, resultado(socket, Conta.reconectar(socket.assigns.usuario))}
 
   def handle_event("desconectar", _, socket) do
-    Conexao.encerrar(socket.assigns.usuario.tenant_id)
-    {:noreply, socket}
+    Conta.desconectar(socket.assigns.usuario)
+    {:noreply, assign(socket, erro_whatsapp: nil)}
   end
+
+  defp resultado(socket, :ok), do: assign(socket, erro_whatsapp: nil)
+  defp resultado(socket, {:error, :desativado}), do: assign(socket, erro_whatsapp: "O WhatsApp está desativado neste ambiente.")
+  defp resultado(socket, {:error, _}), do: assign(socket, erro_whatsapp: "Não foi possível conectar o WhatsApp agora. Tente de novo.")
 
   defp estado(socket, e) do
     qr =
@@ -158,25 +180,50 @@ defmodule PainelBase.ContaLive do
     <section class="cartao">
       <h2>WhatsApp</h2>
       <p class="estado"><span class="simbolo" aria-hidden="true">{elem(@rotulo, 1)}</span> {elem(@rotulo, 0)}</p>
+      <p :if={@erro_whatsapp} class="erro" role="alert">{@erro_whatsapp}</p>
       <div :if={@qr} class="qr-caixa">
         {@qr}
         <p class="apoio">No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho, e leia o código.</p>
       </div>
       <button :if={@canal == :sem_sessao} type="button" class="botao" phx-click="conectar">Conectar WhatsApp</button>
+      <button :if={@canal == :desconectado} type="button" class="botao" phx-click="reconectar">Reconectar</button>
       <button :if={@canal != :sem_sessao} type="button" class="botao secundario" phx-click="desconectar">Desconectar</button>
     </section>
     <section class="cartao">
       <h2>Conta de anúncios</h2>
+      <p :if={@aviso} class="aviso" role="status">{@aviso}</p>
+      <p :if={@erro} class="erro" role="alert">{@erro}</p>
       <%= if @anuncios do %>
         <dl class="metricas">
           <div><dt>Conta</dt><dd>{@anuncios["conta_id"]}</dd></div>
           <div><dt>Token</dt><dd>{@anuncios["token"]}</dd></div>
           <div><dt>Situação</dt><dd>{@anuncios["status"]}</dd></div>
         </dl>
+        <details class="substituir">
+          <summary class="botao secundario">Substituir</summary>
+          <.form_anuncios />
+        </details>
+        <form method="post" action="/conta/anuncios/remover">
+          <.csrf /><button type="submit" class="botao secundario">Remover</button>
+        </form>
       <% else %>
-        <p class="apoio">Nenhuma conta de anúncios conectada. Fale com o agente pelo WhatsApp para conectar.</p>
+        <p class="apoio">Nenhuma conta de anúncios conectada. Informe os dados abaixo ou fale com o agente pelo WhatsApp.</p>
+        <.form_anuncios />
       <% end %>
     </section>
+    """
+  end
+
+  defp form_anuncios(assigns) do
+    ~H"""
+    <form method="post" action="/conta/anuncios" class="campos" autocomplete="off">
+      <.csrf />
+      <label>Token de acesso<input type="password" name="token" required autocomplete="off" /></label>
+      <label>ID da conta de anúncios<input type="text" name="conta_id" required inputmode="numeric" placeholder="act_1234567890" autocomplete="off" /></label>
+      <label>ID da página<input type="text" name="pagina_id" required inputmode="numeric" autocomplete="off" /></label>
+      <label>ID do Instagram (opcional)<input type="text" name="instagram_id" inputmode="numeric" autocomplete="off" /></label>
+      <button type="submit" class="botao">Salvar</button>
+    </form>
     """
   end
 end

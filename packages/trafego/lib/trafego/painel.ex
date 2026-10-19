@@ -1,6 +1,6 @@
 defmodule Trafego.Painel do
   @moduledoc """
-  Leitura para o painel (oferta "trafego.painel" 1.0). So leitura: nada aqui cria, edita ou ativa. Toda funcao recebe o TENANT
+  Leitura para o painel (oferta "trafego.painel" 1.1). Leitura, mais o cadastro/remocao da propria conta de anuncios (4.7); nada aqui cria, edita ou ativa campanha. Toda funcao recebe o TENANT
   da sessao (nunca um id de conta): a conta vem do registro do tenant (Trafego.Acesso). Nao devolve token, nem texto da conversa.
   """
   alias Trafego.{AbaIA, Acesso, Plano}
@@ -28,6 +28,12 @@ defmodule Trafego.Painel do
   end
 
   def atividade(tenant), do: AbaIA.projetar(tenant)
+
+  @doc "Cadastro manual pelo proprio usuario (oferta 1.1): valida na plataforma e grava cifrada no tenant da sessao. {:ok, conta_id} | {:error, motivo}"
+  def cadastrar_conta(tenant, cred), do: Acesso.cadastrar(tenant, cred)
+
+  @doc "Remove a conta e a foto de sincronizacao do tenant. Nada na plataforma e tocado."
+  def remover_conta(tenant), do: Trafego.Equipe.remover_conta(tenant)
 
   @doc "Conta para tela (token mascarado) ou nil."
   def conta(tenant), do: Acesso.mascarado(tenant)

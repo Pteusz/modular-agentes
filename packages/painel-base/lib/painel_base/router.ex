@@ -54,6 +54,8 @@ defmodule PainelBase.Router do
     pipe_through :app
 
     get "/campanhas/:id", CampanhaController, :show
+    post "/conta/anuncios", ContaController, :salvar_anuncios
+    post "/conta/anuncios/remover", ContaController, :remover_anuncios
 
     live_session :corretor, on_mount: PainelBase.Plugs.Autenticar, layout: {PainelBase.Layouts, :app} do
       live "/", InicioLive

@@ -12,8 +12,8 @@ defmodule Nucleo.Automacoes.Trafego do
   @impl Nucleo.Automacao
   def contrato,
     do: %{
-      versao: "1.3",
-      oferece: %{"trafego" => "1.0", "trafego.painel" => "1.0", "trafego.equipe" => "1.0", "trafego.monitor" => "1.0"},
+      versao: "1.4",
+      oferece: %{"trafego" => "1.0", "trafego.painel" => "1.1", "trafego.equipe" => "1.0", "trafego.monitor" => "1.0"},
       exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}
     }
 

@@ -2,7 +2,7 @@ defmodule PainelBase.Layouts do
   @moduledoc "Casca das paginas: raiz sem JS (entrada/recuperacao), raiz com LiveView (area logada), cabecalho com a marca e navegacao inferior (mobile first)."
   use Phoenix.Component
 
-  @nav [{"/", "Início", :inicio}, {"/campanhas", "Campanhas", :campanhas}, {"/agente", "Agente", :agente}, {"/conta", "Conta", :conta}]
+  @nav [{"/", "Início", :inicio}, {"/campanhas", "Campanhas", :campanhas}, {"/agente", "Agente", :agente}]
 
   # Dois aneis sobrepostos com um ponto, em cobalto.
   def marca(assigns) do
@@ -68,15 +68,36 @@ defmodule PainelBase.Layouts do
     """
   end
 
+  defp iniciais(nil), do: "?"
+
+  defp iniciais(usuario) do
+    (usuario[:nome] || usuario[:email] || "?")
+    |> String.split(~r/[\s@.]+/, trim: true)
+    |> Enum.take(2)
+    |> Enum.map_join(&String.first/1)
+    |> String.upcase()
+  end
+
   def app(assigns) do
     assigns = assigns |> Map.put_new_lazy(:nav, fn -> @nav ++ PainelBase.Extensao.nav(assigns[:usuario]) end) |> Map.put_new(:ativo, nil)
 
     ~H"""
     <header class="topo">
       <div class="marca-linha"><.marca /><span class="nome">modular agentes</span></div>
+      <nav class="principal" aria-label="Principal">
+        <.link :for={{href, rotulo, chave} <- @nav} navigate={href} aria-current={if @ativo == chave, do: "page"} class={if @ativo == chave, do: "ativo"}>{rotulo}</.link>
+      </nav>
+      <details :if={@usuario} class="menu-usuario">
+        <summary aria-label="Menu do usuário"><span class="avatar" aria-hidden="true">{iniciais(@usuario)}</span></summary>
+        <div class="menu-painel">
+          <p class="quem"><strong>{@usuario.nome}</strong><br /><span class="apoio">{@usuario.email}</span></p>
+          <.link navigate="/conta" aria-current={if @ativo == :conta, do: "page"}>Conta</.link>
+          <form method="post" action="/sair"><.csrf /><button type="submit">Sair</button></form>
+        </div>
+      </details>
     </header>
     <main class="miolo">{@inner_content}</main>
-    <nav class="inferior" aria-label="Principal">
+    <nav class="inferior" data-itens={length(@nav)} aria-label="Principal (celular)">
       <.link :for={{href, rotulo, chave} <- @nav} navigate={href} aria-current={if @ativo == chave, do: "page"} class={if @ativo == chave, do: "ativo"}>
         <span class="rotulo">{rotulo}</span>
       </.link>

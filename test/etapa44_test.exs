@@ -104,7 +104,7 @@ defmodule Etapa44Test do
     assert carregados[:gestao_equipe] == ContratoGestao.versao()
     assert :ok = Nucleo.Manifesto.validar(carregados)
     # o trafego passa a oferecer a fronteira da equipe, sem quebrar a oferta anterior
-    assert %{"trafego" => "1.0", "trafego.painel" => "1.0", "trafego.equipe" => "1.0"} = ContratoTrafego.contrato().oferece
+    assert %{"trafego" => "1.0", "trafego.painel" => "1.1", "trafego.equipe" => "1.0"} = ContratoTrafego.contrato().oferece
 
     {dono, admin} = equipe!(u)
     assert GestaoEquipe.papel(dono) == :dono
