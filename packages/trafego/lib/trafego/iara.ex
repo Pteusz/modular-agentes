@@ -106,6 +106,8 @@ defmodule Trafego.Iara do
         "plano" => opts[:plano_id]
       }
 
+      entrada = Map.merge(entrada, opts[:contexto] || %{})
+
       case IA.chamar(tenant, :pequena, :falar, entrada) do
         {:ok, %{"texto" => t}, uso} ->
           Evento.custo(tenant, opts[:plano_id], "planejador", "falar", uso)

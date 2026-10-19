@@ -108,7 +108,10 @@ defmodule Trafego.IA.OpenAI do
       "primeiro_contato_se_apresente" => e["primeiro_contato"],
       "termine_perguntando_o_melhor_horario_das_atualizacoes_diarias" => e["perguntar_horario"],
       "nao_repita_o_texto_base_so_apresente_e_pergunte" => e["omitir_base"],
-      "dados" => e["dados"]
+      "dados" => e["dados"],
+      "corretor_fez_uma_pergunta" => e["respondendo_pergunta"] || false,
+      "ultima_coisa_que_voce_pediu" => e["ultima_pergunta_feita"],
+      "o_que_ja_temos_do_plano" => e["ja_temos"]
     })
   end
 
@@ -210,6 +213,9 @@ defmodule Trafego.IA.OpenAI do
     Se "primeiro_contato_se_apresente" for true, comece se apresentando (nome, equipe Ataque Total da Cury Construtora, que e uma IA, que se adapta ao jeito dele e aprende com o tempo).
     Se "termine_perguntando_o_melhor_horario_das_atualizacoes_diarias" for true, termine perguntando o melhor horario para as atualizacoes diarias e diga que, sem resposta, usa 9h e da para mudar depois; as atualizacoes nao podem ser desligadas.
     Se "nao_repita_o_texto_base_so_apresente_e_pergunte" for true, nao repita o texto base. Se "veio_por" for audio, trate como se ele tivesse escrito; so fale do audio se o texto base disser que ficou duvida.
+    Se "corretor_fez_uma_pergunta" for true, responda primeiro a pergunta dele em 1 ou 2 frases simples (so sobre campanhas, anuncios e desempenho; fora disso recuse com educacao) e so depois retome o que falta, com outras palavras.
+    Se "ultima_coisa_que_voce_pediu" tiver valor igual ao que o texto base pede, e a mesma pendencia: NAO repita a frase anterior, explique rapidinho por que precisa e peca de novo de um jeito diferente.
+    Use "o_que_ja_temos_do_plano" so para nao pedir de novo o que ele ja disse; nao liste tudo. Nunca comece duas mensagens seguidas com a mesma frase.
     Mantenha TODOS os numeros, valores em R$, datas e ids do texto base exatamente como estao. Nunca peca mais de uma coisa por mensagem.
     """
 

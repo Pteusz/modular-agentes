@@ -51,7 +51,9 @@ defmodule Trafego.IA.Falso do
 
   # audio de teste: os bytes SAO o texto falado
   @impl true
-  def transcrever(bytes, %{segundos: s}) when is_binary(bytes), do: {:ok, bytes, %{"modelo" => "falso-audio", "segundos" => s}}
+  def transcrever(bytes, %{segundos: s}) when is_binary(bytes) do
+    if String.valid?(bytes), do: {:ok, bytes, %{"modelo" => "falso-audio", "segundos" => s}}, else: {:error, :audio_nao_suportado}
+  end
 
   defp uso(faixa, e, s),
     do: %{"modelo" => "falso-#{faixa}", "tokens_in" => div(String.length(inspect(e)), 4) + 1, "tokens_out" => div(String.length(inspect(s)), 4) + 1}

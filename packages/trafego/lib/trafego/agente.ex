@@ -26,7 +26,24 @@ defmodule Trafego.Agente do
   plano aguardando confirmacao; proposta aberta (ativar/pausar) lida em texto curto; plano em rascunho; pedido curto de
   ativar/pausar (vira PROPOSTA); senao plano novo.
   """
-  def processar(tenant, texto), do: gate(tenant, texto, "texto", fn -> conversa(tenant, texto, "texto") end)
+  def processar(tenant, texto), do: seguro(tenant, "texto", fn -> gate(tenant, texto, "texto", fn -> conversa(tenant, texto, "texto") end) end)
+
+  # Nenhuma excecao deixa o corretor no silencio (o Laco so registra o evento): vira resposta amigavel. O evento leva so o tipo
+  # da excecao (nunca a mensagem, que poderia carregar conteudo do corretor).
+  defp seguro(tenant, origem, f) do
+    f.()
+  rescue
+    e ->
+      Evento.emitir(tenant, "operacao", nil, "planejador", "conversa_excecao", %{"erro" => inspect(e.__struct__), "origem" => origem})
+      {:ok, texto_falha(origem)}
+  catch
+    tipo, _ ->
+      Evento.emitir(tenant, "operacao", nil, "planejador", "conversa_excecao", %{"erro" => inspect(tipo), "origem" => origem})
+      {:ok, texto_falha(origem)}
+  end
+
+  defp texto_falha("audio"), do: "Tive um problema ao tratar esse audio. Tenta mandar de novo ou escreve por texto; nada foi alterado."
+  defp texto_falha(_), do: "Tive um problema aqui e nao consegui tratar sua mensagem. Tenta de novo em instantes; nada foi alterado."
 
   # ativo + credencial valida antes de qualquer coisa (sem IA, sem gasto); token invalido responde na voz da Iara
   defp gate(tenant, texto, origem, f) do
@@ -124,7 +141,7 @@ defmodule Trafego.Agente do
   end
 
   defp pergunta_pendente([]), do: ""
-  defp pergunta_pendente([primeira | _]), do: "Falta so isso pra fechar o plano: #{Plano.rotulo(primeira)}."
+  defp pergunta_pendente([primeira | _]), do: "Pra fechar o plano preciso de #{Plano.rotulo(primeira)}."
 
   # fala em duvida (audio): o corretor responde por texto OU audio; "sim" processa a fala como texto
   defp audio_pendente(tenant, fala, texto, origem) do
@@ -178,7 +195,7 @@ defmodule Trafego.Agente do
     if perguntar, do: Iara.atualizar(tenant, %{"horario_estado" => "perguntado"})
 
     falar_opts = [texto: texto, origem: origem, primeiro: primeiro, pergunta_horario: perguntar, omitir_base: omitir]
-    {:ok, Iara.falar(tenant, base, falar_opts ++ Keyword.take(extra, [:situacao, :dados, :plano_id]))}
+    {:ok, Iara.falar(tenant, base, falar_opts ++ Keyword.take(extra, [:situacao, :dados, :plano_id, :contexto]))}
   end
 
   # nada pendente com o corretor (plano, proposta ou audio em duvida)
@@ -286,10 +303,10 @@ defmodule Trafego.Agente do
   Midia que chegou pelo canal (Amarula). Baixa e passa pela mesma conferencia. Se nao der para baixar, avisa e propoe
   alternativa (mandar como documento ou colocar o arquivo no painel) em vez de fingir que recebeu.
   """
-  def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: :audio}} = msg), do: receber_audio(tenant, msg)
+  def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: :audio}} = msg), do: seguro(tenant, "audio", fn -> receber_audio(tenant, msg) end)
 
   def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: kind}} = msg) when kind in [:image, :document, :video] do
-    gate(tenant, nil, "texto", fn -> entregar(tenant, midia_criativo(tenant, msg), nil, "texto") end)
+    seguro(tenant, "midia", fn -> gate(tenant, nil, "texto", fn -> entregar(tenant, midia_criativo(tenant, msg), nil, "texto") end) end)
   end
 
   def receber_midia(tenant, _msg) do
@@ -353,7 +370,7 @@ defmodule Trafego.Agente do
         Evento.custo_audio(tenant, "planejador", "transcrever", uso)
         Evento.emitir(tenant, "operacao", nil, "planejador", "audio_transcrito", %{"segundos" => uso["segundos"]})
 
-        case String.trim(texto) do
+        case if(String.valid?(texto), do: String.trim(texto), else: "") do
           "" -> entregar(tenant, {:ok, "Nao consegui entender o audio. Tenta de novo falando mais perto do microfone ou escreve por texto; nada foi alterado."}, nil, "audio", horario: false)
           fala -> audio_como_texto(tenant, fala)
         end
@@ -431,7 +448,7 @@ defmodule Trafego.Agente do
         if ignorados != [], do: Evento.emitir(tenant, "operacao", plano["id"], "planejador", "conta_do_modelo_ignorada", %{"erro" => "conta_do_modelo_ignorada"})
 
         plano = Map.put(plano, "atencao", Aprendizado.atencao(tenant, Plano.situacao(plano)))
-        concluir_plano(tenant, plano)
+        concluir_plano(tenant, plano, texto)
 
       {:error, {:teto_ia, info}} ->
         {:ok, TetoIA.mensagem(info)}
@@ -442,7 +459,7 @@ defmodule Trafego.Agente do
     end
   end
 
-  defp concluir_plano(tenant, plano) do
+  defp concluir_plano(tenant, plano, texto \\ nil) do
     case Plano.pendencias(plano) do
       [] ->
         plano = Plano.salvar(tenant, Map.put(plano, "status", "aguardando_confirmacao"))
@@ -454,10 +471,29 @@ defmodule Trafego.Agente do
         plano = Plano.salvar(tenant, Map.put(plano, "status", "rascunho"))
         Evento.emitir(tenant, "plano", plano["id"], "planejador", "pendencias", %{"faltam" => pend})
         # uma pergunta por vez: so a primeira pendencia vai pro corretor (a lista toda fica no evento)
-        resto = if tl(pend) == [], do: "", else: " O resto eu pergunto depois, um de cada vez."
+        resto = if tl(pend) == [], do: "", else: " O resto a gente ve depois, uma coisa de cada vez."
+        faltando = hd(pend)
+        ultima = Iara.perfil(tenant)["ultima_pendencia"]
+        mesma = is_map(ultima) and ultima["plano_id"] == plano["id"]
+        repetida = mesma and ultima["faltando"] == faltando
+        Iara.atualizar(tenant, %{"ultima_pendencia" => %{"plano_id" => plano["id"], "faltando" => faltando}})
 
-        {:ok, "Falta so isso pra fechar o plano: #{Plano.rotulo(hd(pend))}.#{resto}",
-         situacao: :falta, vazio: Plano.vazio?(plano), plano_id: plano["id"], dados: %{"faltando" => hd(pend), "faltam_depois" => tl(pend)}}
+        # o corretor perguntou (ou mudou de assunto) em vez de responder: a fala leva a pergunta dele e o que ja foi pedido,
+        # e o texto fixo nao repete a frase anterior
+        base =
+          if repetida,
+            do: "Ainda preciso de #{Plano.rotulo(faltando)} pra fechar o plano.#{resto}",
+            else: "Pra fechar o plano preciso de #{Plano.rotulo(faltando)}.#{resto}"
+
+        contexto = %{
+          "respondendo_pergunta" => is_binary(texto) and String.contains?(texto, "?"),
+          "ultima_pergunta_feita" => if(mesma, do: Plano.rotulo(ultima["faltando"])),
+          "ja_temos" => Map.drop(plano, ~w(id status atencao resultado url_final))
+        }
+
+        {:ok, base,
+         situacao: :falta, vazio: Plano.vazio?(plano), plano_id: plano["id"], contexto: contexto,
+         dados: %{"faltando" => faltando, "faltam_depois" => tl(pend)}}
     end
   end
 
