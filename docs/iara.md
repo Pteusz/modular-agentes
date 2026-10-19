@@ -19,7 +19,7 @@ Data: 2026-10-19. Base: decisoes do Mateus nesta conversa. Nada implementado ain
 - Proativa so quando importa: alerta de verba queimando e atualizacao diaria (secao 4).
 
 ### Primeiro contato
-Na primeira conversa com o corretor a Iara: (a) se apresenta (nome, equipe, e que e uma IA); (b) explica que se adapta ao jeito dele e aprende com o tempo, melhorando a cada campanha; (c) pergunta o MELHOR HORARIO para atualiza-lo sobre o andamento das campanhas (guardado por corretor; padrao 9h se ele nao responder; ele pode mudar depois ou pedir silencio).
+Na primeira conversa com o corretor a Iara: (a) se apresenta (nome, equipe, e que e uma IA); (b) explica que se adapta ao jeito dele e aprende com o tempo, melhorando a cada campanha; (c) pergunta o MELHOR HORARIO para atualiza-lo sobre o andamento das campanhas (guardado por corretor; padrao 9h se ele nao responder; ele pode MUDAR o horario depois, mas NAO pode desligar as atualizacoes: decisao do Mateus).
 
 ## 3. Criar campanha: o que a Iara pede e o que ela propoe
 O corretor so precisa dar 4 coisas; a Iara monta e propoe o resto.
@@ -47,6 +47,6 @@ Antes de pedir confirmacao, a Iara VALIDA o plano e mostra o resultado: (a) exig
 ## 5. Fora desta fase
 - Agente adicional de planejamento e otimizacao, que usa o que foi aprendido (previsto pelo Mateus para as proximas atualizacoes). Hoje continua um unico agente (A3); o encaixe e o aprendizado por tenant (A7).
 
-## 6. Em aberto
+## 6. Decidido e em aberto
+- DECIDIDO: o corretor nao pode desligar as atualizacoes (so escolher/mudar o horario).
 1. Nome do imovel no plano quando ha varios parecidos no feed (chave e o id; a Iara mostra bairro e dormitorios para o corretor escolher).
-2. Silencio: se o corretor pode desligar a atualizacao diaria por completo (os alertas de verba queimando continuam).
