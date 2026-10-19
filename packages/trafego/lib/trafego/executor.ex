@@ -40,18 +40,12 @@ defmodule Trafego.Executor do
     {:error, e}
   end
 
-  # WhatsApp: numero normalizado (+55 e DDD) e vinculado a Pagina. Sem numero (so a Pagina) segue. Se nao deu para ler os vinculados
-  # (token sem permissao, plataforma fora), tenta criar e o erro da Meta e traduzido (`explicar/1`).
-  defp checar_numero(tenant, %{"destino" => "whatsapp", "numero" => n}) when n not in [nil, ""] do
+  # WhatsApp: numero normalizado (+55 e DDD). NAO se bloqueia por vinculo: o campo whatsapp_number da Pagina vem vazio mesmo com o
+  # numero vinculado e aceito pela Meta (diagnostico de 2026-10-19). A Meta decide e o erro dela e traduzido (`explicar/1`).
+  defp checar_numero(_tenant, %{"destino" => "whatsapp", "numero" => n}) when n not in [nil, ""] do
     case Ficha.normalizar_numero(n) do
       {:ok, ok} ->
-        case Acesso.chamar(tenant, :numeros_vinculados, []) do
-          {:ok, lista} when is_list(lista) ->
-            if Enum.any?(lista, &(Ficha.chave_numero(&1) == Ficha.chave_numero(ok))), do: {:ok, ok}, else: {:error, {:numero_nao_vinculado, lista}}
-
-          _ ->
-            {:ok, ok}
-        end
+        {:ok, ok}
 
       {:sem_ddd, _} ->
         {:error, :numero_sem_ddd}

@@ -119,19 +119,6 @@ defmodule Etapa521Test do
     assert %{"numero" => "5511974208400"} = Plano.atual(t)
   end
 
-  test "numero nao vinculado: bloqueia ANTES de criar, diz a causa e as saidas, plano guardado" do
-    {t, _} = ate_a_foto("11 97420-8400", ["5511999990000"])
-    l = foto(t)
-    txt = junto(l)
-    assert da_conta(t) == [], "nao pode criar nada na Meta"
-    assert txt =~ "Nao criei nada na Meta"
-    assert txt =~ "1. " and txt =~ "2. " and txt =~ "3. " and txt =~ "sem numero"
-    assert txt =~ "+55 11 99999-0000", "lista os vinculados"
-    refute txt =~ "graph_100"
-    assert %{"status" => "erro"} = Plano.atual(t)
-    assert curtas(l) == []
-  end
-
   test "retomada: ajustar o numero e tentar de novo sem repetir a ficha" do
     {t, _} = ate_a_foto("11 97420-8400", ["5511999990000"])
     foto(t)
@@ -148,7 +135,8 @@ defmodule Etapa521Test do
 
     [fim] = dizer(t, "pode fazer sim")
     assert fim =~ "pausada"
-    assert [%{"status" => "PAUSADA"}] = da_conta(t)
+    # a tentativa recusada deixou um rascunho parcial PAUSADO (nunca apagado); a retomada cria a campanha completa
+    assert [%{"status" => "PAUSADA"}, %{"status" => "PAUSADA", "conjuntos" => [_ | _]}] = da_conta(t)
   end
 
   test "retomada pelo 'tenta de novo' depois de vincular na Meta" do
