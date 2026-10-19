@@ -223,9 +223,9 @@ defmodule Trafego.Ficha do
   def pedido("url"), do: "o link do site"
   def pedido("pixel"), do: "o pixel (codigo de rastreio do site)"
   def pedido("formulario"), do: "o id do formulario"
-  def pedido("teto_menor_que_diario"), do: "(teto_menor_que_diario) o teto total precisa ser maior que a verba diaria: qual teto voce quer?"
-  def pedido("teto_acima_do_maximo"), do: "(teto_acima_do_maximo) o teto passou do maximo permitido (#{Plano.brl(Config.teto_max_centavos())}): qual valor, ate esse limite?"
-  def pedido("janela_invalida"), do: "(janela_invalida) a janela ficou invalida: de que dia ate que dia o anuncio roda?"
+  def pedido("teto_menor_que_diario"), do: "o teto total precisa ser maior que a verba diaria: qual teto voce quer?"
+  def pedido("teto_acima_do_maximo"), do: "o teto passou do maximo permitido (#{Plano.brl(Config.teto_max_centavos())}): qual valor, ate esse limite?"
+  def pedido("janela_invalida"), do: "a janela ficou invalida: de que dia ate que dia o anuncio roda?"
   def pedido(outro), do: Plano.rotulo(outro)
 
   # ---- padroes sensatos (sugestao da Iara)

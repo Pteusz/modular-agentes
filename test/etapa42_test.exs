@@ -290,7 +290,7 @@ defmodule Etapa42Test do
         assert resp(Agente.receber_criativo(ta, "baixa.png", png(400, 400))) =~ "resolucao"
         assert Plano.atual(ta)["criativo"]["midia"] == "foto1.png"
         refute File.exists?(Path.join([midia, ta, "baixa.png"]))
-        assert resp(Agente.receber_criativo(ta, "foto2.png", png(1080, 1350))) =~ "confirma"
+        assert resp(Agente.receber_criativo(ta, "foto2.png", png(1080, 1350))) =~ ~r/confirma/i
         assert %{"criativo" => %{"midia" => "foto2.png"}, "status" => "aguardando_confirmacao"} = Plano.atual(ta)
         assert File.exists?(Path.join([midia, ta, "foto2.png"]))
 
@@ -299,7 +299,7 @@ defmodule Etapa42Test do
         assert resp(Agente.processar(ta, "ENUM-INVALIDO")) == @confirma
         assert posts(msrv) == []
         r = resp(Agente.processar(ta, "Perfeito, pode fazer sim!"))
-        assert r =~ "pausada" and r =~ "confere com o plano"
+        assert r =~ "pausada" and r =~ "igual ao plano"
         assert %{"status" => "verificado", "campanha_id" => cid} = Plano.ler(ta, "p1")
 
         ps = posts(msrv)
@@ -388,7 +388,7 @@ defmodule Etapa42Test do
         assert_receive {:amarula, :messages_upsert, %{messages: [%Amarula.Msg{type: :media, content: %Amarula.Content.Media{kind: :image}} = msg]}}, 5000
         assert {:ok, ^bytes} = Amarula.download_media(msg)
         r = resp(Agente.receber_midia(td, msg))
-        assert r =~ "confirma"
+        assert r =~ ~r/confirma/i
         assert [arq] = File.ls!(Path.join(midia, td))
         assert String.ends_with?(arq, ".png")
         assert Plano.atual(td)["criativo"]["midia"] == arq

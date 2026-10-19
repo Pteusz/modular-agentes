@@ -255,12 +255,17 @@ defmodule Trafego.Plataforma.Meta do
             "anuncios" =>
               for ad <- get_in(a, ["ads", "data"]) || [] do
                 spec = get_in(ad, ["creative", "object_story_spec"]) || %{}
-                %{"id" => ad["id"], "status" => status(ad["status"]), "criativo" => %{"midia" => get_in(ad, ["creative", "name"]), "texto" => get_in(spec, ["link_data", "message"]) || get_in(spec, ["video_data", "message"])}}
+                %{"id" => ad["id"], "status" => status(ad["status"]), "criativo" => %{"midia" => nome_criativo(get_in(ad, ["creative", "name"])), "texto" => get_in(spec, ["link_data", "message"]) || get_in(spec, ["video_data", "message"])}}
               end
           }
         end
     }
   end
+
+  # a Meta anexa ao nome do criativo um sufixo automatico " AAAA-MM-DD-<hex>"; o plano guarda so o nome enviado
+  @doc false
+  def nome_criativo(n) when is_binary(n), do: String.replace(n, ~r/\s\d{4}-\d{2}-\d{2}-[0-9a-f]+$/, "")
+  def nome_criativo(n), do: n
 
   defp status(@pausado), do: "PAUSADA"
   defp status(@ativo), do: "ATIVA"

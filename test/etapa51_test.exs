@@ -207,7 +207,7 @@ defmodule Etapa51Test do
     assert r =~ "Voce confirma?"
     # valores invalidos mantem o codigo no texto (significado do erro)
     u = tenant_pronto()
-    assert dizer(u, String.replace(@pedido, "teto R$ 500", "teto R$ 999999999")) =~ "teto_acima_do_maximo"
+    assert dizer(u, String.replace(@pedido, "teto R$ 500", "teto R$ 999999999")) =~ "passou do maximo"
   end
 
   test "primeiro contato: se apresenta uma vez so, por corretor, e pergunta o melhor horario sem pergunta duplicada" do

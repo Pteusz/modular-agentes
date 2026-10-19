@@ -133,7 +133,7 @@ defmodule Etapa41Test do
     assert [%{"regra_violada" => "orcamento_diario_igual", "acao" => "criar_campanha"} | _] = Aprendizado.historico(ta) |> Enum.reverse()
 
     # ---- erro vira registro e muda a proposta seguinte (estado lido de volta): situacao parecida traz atencao
-    assert resp(Agente.processar(ta, @pedido <> "; pixel 998877")) =~ "orcamento_diario_igual"
+    refute resp(Agente.processar(ta, @pedido <> "; pixel 998877")) =~ "orcamento_diario_igual", "nome interno de regra nao vai ao corretor"
     assert %{"status" => "aguardando_confirmacao", "atencao" => ["orcamento_diario_igual"], "id" => id3} = Plano.atual(ta)
     sim = Aprendizado.parecidos(ta, %{"destino" => "site", "publico" => "casais 30-45 zona sul", "orcamento_diario" => 5000})
     assert "orcamento_diario_igual" in Enum.map(sim, & &1["regra_violada"])
