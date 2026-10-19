@@ -12,8 +12,8 @@ defmodule Nucleo.Automacoes.Trafego do
   @impl Nucleo.Automacao
   def contrato,
     do: %{
-      versao: "1.4",
-      oferece: %{"trafego" => "1.0", "trafego.painel" => "1.1", "trafego.equipe" => "1.0", "trafego.monitor" => "1.0"},
+      versao: "1.5",
+      oferece: %{"trafego" => "1.0", "trafego.painel" => "1.1", "trafego.equipe" => "1.0", "trafego.monitor" => "1.0", "trafego.iara" => "1.0"},
       exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}
     }
 
@@ -50,7 +50,8 @@ defmodule Nucleo.Automacoes.Trafego do
       %{chave: "trafego_atual", leitura: :ultimo},
       %{chave: "trafego_seq", leitura: :ultimo},
       %{chave: "proposta_seq", leitura: :ultimo},
-      %{chave: "aprendizado", leitura: :historico}
+      %{chave: "aprendizado", leitura: :historico},
+      %{chave: "iara_perfil", leitura: :ultimo}
     ]
 
   @impl Nucleo.Automacao

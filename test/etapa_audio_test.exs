@@ -89,32 +89,26 @@ defmodule EtapaAudioTest do
   defp so_audio(t), do: custos(t) |> Enum.filter(&(&1.dados["ref"] == "transcrever"))
 
   # ------------------------------------------------------------------------------------------------------------------
-  test "audio com pedido de ativar: o agente repete o que entendeu e pede confirmacao por TEXTO; 'sim' em audio nunca ativa" do
+  # REGRA MUDADA por decisao do Mateus em 2026-10-19 (etapa 5.1): audio e tratado COMO TEXTO em tudo (inclusive confirmar plano,
+  # ativar e pausar). Nao ha mais trava "so por texto" nem eco "Entendi pelo audio". Transcricao duvidosa: pergunta "e isso mesmo?".
+  test "audio com pedido de ativar: propoe e o 'sim' em audio confirma, como no texto" do
     {t, pid, cid} = montar()
     base = confirmacoes(t)
 
     r = resp(Agente.receber_midia(t, audio("pode ativar a campanha")))
-    assert r =~ "pode ativar a campanha", "repete o que entendeu"
-    assert r =~ ~r/audio/i and r =~ "confirma" and r =~ ~r/por texto/i
+    assert r =~ "confirma"
+    refute r =~ ~r/por texto|Entendi pelo audio|audio nao confirma/i
     assert [%{"tipo" => "ativar", "status" => "aguardando_confirmacao", "plano_id" => ^pid}] = Proposta.listar(t)
     assert status(cid)["status"] == "PAUSADA"
 
-    # 'sim' falado: nao confirma, nao consulta a IA de confirmacao, a proposta segue aberta
     r = resp(Agente.receber_midia(t, audio("sim, pode ativar")))
-    assert r =~ "sim, pode ativar" and r =~ ~r/por texto/i
-    assert status(cid)["status"] == "PAUSADA"
-    assert confirmacoes(t) == base
-    assert [%{"status" => "aguardando_confirmacao"}] = Proposta.listar(t)
-    # 'nao' falado tambem exige texto (uniforme e seguro)
-    assert resp(Agente.receber_midia(t, audio("nao, cancela"))) =~ ~r/por texto/i
-    assert [%{"status" => "aguardando_confirmacao"}] = Proposta.listar(t)
-
-    # o mesmo 'sim' por texto confirma
-    assert resp(Agente.processar(t, "sim, pode ativar")) =~ ~r/ativ/i
+    assert r =~ ~r/ativ/i
+    refute r =~ ~r/por texto/i
     assert status(cid)["status"] == "ATIVA"
+    assert confirmacoes(t) == base + 1
   end
 
-  test "audio com pedido de pausar: so propoe; 'sim' em audio nao pausa; texto pausa" do
+  test "audio com pedido de pausar: 'sim' em audio pausa; 'nao' em audio cancela" do
     {t, _pid, cid} = montar()
     assert resp(Agente.processar(t, "ativa a campanha")) =~ "confirma"
     assert resp(Agente.processar(t, "sim, pode ativar")) =~ "ativa"
@@ -122,26 +116,25 @@ defmodule EtapaAudioTest do
 
     assert resp(Agente.receber_midia(t, audio("pausa a campanha"))) =~ ~r/pausar.*confirma/is
     assert status(cid)["status"] == "ATIVA"
-    assert resp(Agente.receber_midia(t, audio("sim"))) =~ ~r/por texto/i
+    assert resp(Agente.receber_midia(t, audio("nao, deixa assim"))) =~ ~r/cancel/i
     assert status(cid)["status"] == "ATIVA"
-    assert resp(Agente.processar(t, "sim, pode pausar")) =~ ~r/paus/i
+    assert resp(Agente.receber_midia(t, audio("pausa a campanha"))) =~ "confirma"
+    assert resp(Agente.receber_midia(t, audio("sim"))) =~ ~r/paus/i
     assert status(cid)["status"] == "PAUSADA"
   end
 
-  test "audio com o pedido de campanha entra no fluxo normal (plano); confirmar o plano exige texto" do
+  test "audio com o pedido de campanha entra no fluxo normal (plano) e confirmar o plano por audio cria a campanha" do
     t = novo()
     conta = vincular(t)
     r = resp(Agente.receber_midia(t, audio(@pedido)))
-    assert r =~ "Voce confirma?" and r =~ ~r/por texto/i
-    assert %{"status" => "aguardando_confirmacao"} = Plano.atual(t)
-
-    assert resp(Agente.receber_midia(t, audio("pode fazer sim"))) =~ ~r/por texto/i
+    assert r =~ "confirma"
+    refute r =~ ~r/por texto/i
     assert %{"status" => "aguardando_confirmacao"} = Plano.atual(t)
     assert Simulada.todas() |> Enum.filter(&(&1["conta_id"] == conta)) == []
-    assert confirmacoes(t) == 0
 
-    assert resp(Agente.processar(t, "pode fazer sim")) =~ "pausada"
+    assert resp(Agente.receber_midia(t, audio("pode fazer sim"))) =~ "pausada"
     assert Simulada.todas() |> Enum.filter(&(&1["conta_id"] == conta)) |> length() == 1
+    assert confirmacoes(t) == 1
   end
 
   test "limites e erros: duracao, tamanho, download, transcricao vazia ou com falha respondem sem alterar nada e sem custo", %{baixados: n} do
@@ -186,7 +179,7 @@ defmodule EtapaAudioTest do
     assert_in_delta Custo.brl_audio("gpt-transcribe", 30), 0.01125, 1.0e-6
     Application.put_env(:trafego, :preco_brl_por_min, %{"falso-audio" => 0.6})
 
-    assert resp(Agente.receber_midia(t, audio("quero anunciar", seconds: 60))) =~ "quero anunciar"
+    assert resp(Agente.receber_midia(t, audio("quero anunciar", seconds: 60))) =~ "Iara"
     assert [%{dados: d}] = so_audio(t)
     assert d["modelo"] == "falso-audio" and d["segundos"] == 60
     assert_in_delta d["custo_brl"], 0.6, 1.0e-6
@@ -196,7 +189,8 @@ defmodule EtapaAudioTest do
     Application.put_env(:trafego, :teto_ia_brl, 0.7)
     on_exit(fn -> Application.put_env(:trafego, :teto_ia_brl, 1000.0) end)
     assert {:aviso, _} = TetoIA.status(t)
-    assert resp(Agente.receber_midia(t, audio("outra", seconds: 60))) =~ "outra"
+    # a transcricao ainda foi permitida (aviso), mas ao interpretar a fala o teto ja estourou: responde o teto, sem alterar nada
+    assert resp(Agente.receber_midia(t, audio("outra", seconds: 60))) =~ ~r/teto de IA/i
     assert {:bloqueado, _} = TetoIA.status(t)
     n = length(custos(t))
     r = resp(Agente.receber_midia(t, audio("mais uma", seconds: 60)))
@@ -208,7 +202,7 @@ defmodule EtapaAudioTest do
     t = novo()
     vincular(t)
     segredo = "meu cpf e um assunto pessoal xyzzy"
-    log = ExUnit.CaptureLog.capture_log(fn -> assert resp(Agente.receber_midia(t, audio(segredo))) =~ "xyzzy" end)
+    log = ExUnit.CaptureLog.capture_log(fn -> assert is_binary(resp(Agente.receber_midia(t, audio(segredo)))) end)
     refute log =~ "xyzzy"
     todo = Registro.eventos(t) |> Enum.map(&Jason.encode!(&1.dados)) |> Enum.join(" ")
     refute todo =~ "xyzzy"
@@ -250,7 +244,8 @@ defmodule EtapaAudioTest do
     assert headers["content-type"] =~ "multipart/form-data"
     assert corpo =~ "gpt-transcribe" and corpo =~ ~r/name="language"\r\n\r\npt/ and corpo =~ ~r/filename="audio\.ogg"/
 
-    assert resp(Agente.receber_midia(t, audio("qualquer"))) =~ "ativa a campanha"
+    # a fala da Iara cai no texto fixo (o servidor falso so responde transcricao): o audio foi tratado como "ativa a campanha"
+    assert resp(Agente.receber_midia(t, audio("qualquer"))) =~ ~r/nao ha campanha/i
     assert [%{dados: d}] = so_audio(t)
     assert d["modelo"] == "gpt-transcribe" and d["segundos"] == 6
     assert_in_delta d["custo_brl"], 6 / 60 * 0.0045 * 5.0, 1.0e-6
@@ -272,7 +267,7 @@ defmodule EtapaAudioTest do
     Canal.Simulado.injetar_midia(ref, :proprio, audio("quero anunciar um lancamento"))
 
     esperar = fn f -> Enum.reduce_while(1..50, false, fn _, _ -> if f.(), do: {:halt, true}, else: (Process.sleep(100); {:cont, false}) end) end
-    assert esperar.(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "quero anunciar um lancamento")) end)
+    assert esperar.(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Iara")) end)
     assert Enum.all?(Canal.Simulado.enviadas(ref), &String.starts_with?(&1, "[agente] "))
     assert Canal.Simulado.ignoradas(ref) == 1
 

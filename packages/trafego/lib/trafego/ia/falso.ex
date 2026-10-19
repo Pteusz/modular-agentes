@@ -17,6 +17,38 @@ defmodule Trafego.IA.Falso do
     {:ok, saida, uso(faixa, entrada, saida)}
   end
 
+  # fala: devolve o texto-base composto, sem reescrever (a persona real vive no adaptador OpenAI)
+  def chamar(faixa, :falar, entrada) do
+    opts = [
+      primeiro: entrada["primeiro_contato"] == true,
+      pergunta_horario: entrada["perguntar_horario"] == true,
+      omitir_base: entrada["omitir_base"] == true
+    ]
+
+    saida = %{"texto" => Trafego.Iara.compor(entrada["base"] || "", opts)}
+    {:ok, saida, uso(faixa, entrada, saida)}
+  end
+
+  # horario: "8h30", "7h", "08:30"
+  def chamar(faixa, :horario, %{"texto" => texto} = entrada) do
+    h =
+      case Regex.run(~r/(?<![\d-])(\d{1,2})\s*(?:h|:)\s*(\d{2})?(?!\d)/i, texto) do
+        [_, hh] -> Trafego.Iara.normalizar_horario(hh)
+        [_, hh, mm] -> Trafego.Iara.normalizar_horario("#{hh}:#{mm}")
+        _ -> nil
+      end
+
+    saida = %{"horario" => h}
+    {:ok, saida, uso(faixa, entrada, saida)}
+  end
+
+  # transcricao duvidosa: o Falso marca "inaudivel" ou "???" no texto falado
+  def chamar(faixa, :checar_transcricao, %{"transcricao" => fala} = entrada) do
+    duvida = if fala =~ ~r/inaudivel|\?\?\?/i, do: "uma parte do audio ficou inaudivel", else: nil
+    saida = %{"duvida" => duvida}
+    {:ok, saida, uso(faixa, entrada, saida)}
+  end
+
   # audio de teste: os bytes SAO o texto falado
   @impl true
   def transcrever(bytes, %{segundos: s}) when is_binary(bytes), do: {:ok, bytes, %{"modelo" => "falso-audio", "segundos" => s}}

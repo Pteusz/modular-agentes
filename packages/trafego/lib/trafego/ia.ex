@@ -1,7 +1,9 @@
 defmodule Trafego.IA do
   @moduledoc """
   Contrato "provedor de IA" (trocar de modelo/provedor nao muda o dominio). `faixa`: :pequena (ler confirmacao,
-  conferir criativo) ou :media (criar/revisar plano). `tarefa`: :planejar | :confirmar.
+  conferir criativo) ou :media (criar/revisar plano). `tarefa`: :planejar | :confirmar | :falar (texto-base -> fala da Iara, entrada
+  "base", "situacao", "mensagem_do_corretor", "origem", "primeiro_contato", "perguntar_horario", "omitir_base", "dados"; saida "texto")
+  | :horario (le "HH:MM" no texto; saida "horario" ou nil) | :checar_transcricao (saida "duvida": o que ficou ambiguo, ou nil).
   Devolve a saida e o uso (modelo, tokens_in, tokens_out) para o evento custo_tokens. O provedor nunca informa id de conta.
   `chamar/4` e a porta do dominio: aplica o teto de custo de IA do corretor (aviso a 80%, bloqueio a 100%) antes de chamar o provedor.
   """

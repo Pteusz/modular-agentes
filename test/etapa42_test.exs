@@ -149,6 +149,10 @@ defmodule Etapa42Test do
       inspect(usuario) =~ "FALHAR-OPENAI" -> {500, %{"error" => %{"message" => "boom"}}}
       nome == "planejar" -> resposta(b, @plano_modelo)
       nome == "confirmar" -> resposta(b, %{"decisao" => decisao(usuario["resposta_do_corretor"])})
+      # 5.1: a fala da Iara devolve o texto-base (os fatos); horario e checagem de audio sem achado
+      nome == "falar" -> resposta(b, %{"texto" => usuario["texto_base_com_os_fatos"]})
+      nome == "horario" -> resposta(b, %{"horario" => nil})
+      nome == "checar_transcricao" -> resposta(b, %{"duvida" => nil})
     end
   end
 
@@ -352,13 +356,15 @@ defmodule Etapa42Test do
         assert posts(msrv) |> length() == 5
 
         # ---- 10. token invalido: status visivel, agente para antes de qualquer chamada, recadastro restaura
-        no = length(HttpFalso.pedidos(osrv))
+        # (5.1) a resposta de token invalido e dita pela Iara (tarefa falar); o agente nao planeja nem le confirmacao
+        sem_falar = fn -> HttpFalso.pedidos(osrv) |> Enum.reject(&(&1.corpo =~ ~s("name":"falar"))) |> length() end
+        no = sem_falar.()
         Agent.update(est, &%{&1 | token: "EAAROTACIONADO"})
         assert {:error, :token_invalido} = Acesso.chamar(ta, :listar_campanhas, [])
         assert Acesso.status(ta) == "token invalido"
         assert Acesso.mascarado(ta)["status"] == "token invalido"
         assert resp(Agente.processar(ta, "quero outra campanha")) =~ "token"
-        assert length(HttpFalso.pedidos(osrv)) == no
+        assert sem_falar.() == no
         assert Enum.any?(evs(ta, "operacao"), &(&1["erro"] == "token_invalido"))
         assert {:ok, _} = Acesso.cadastrar(ta, %{ok | "token" => "EAAROTACIONADO"})
         assert Acesso.status(ta) == "ok"

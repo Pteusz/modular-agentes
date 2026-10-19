@@ -70,21 +70,40 @@ defmodule Trafego.Plano do
 
   @doc "Pendencias: exigencias do destino nao satisfeitas, campos genericos faltando ou invalidos."
   def pendencias(plano) do
-    base =
+    destino = if plano["destino"] in Map.keys(@exigencias), do: [], else: ["destino"]
+
+    campos =
       for {campo, ok?} <- [
-            {"destino", plano["destino"] in Map.keys(@exigencias)},
-            {"publico", presente?(plano["publico"])},
             {"criativo", presente?(get_in(plano, ["criativo", "midia"]))},
             {"orcamento_diario", is_integer(plano["orcamento_diario"]) and plano["orcamento_diario"] > 0},
             {"teto_total", is_integer(plano["teto_total"]) and plano["teto_total"] > 0},
             {"janela", presente?(get_in(plano, ["janela", "inicio"])) and presente?(get_in(plano, ["janela", "fim"]))},
+            {"publico", presente?(plano["publico"])},
             {"meta", is_integer(get_in(plano, ["meta", "resultados"])) and is_integer(get_in(plano, ["meta", "custo_max"]))}
           ],
           not ok?,
           do: campo
 
-    base ++ exigencias_faltando(plano) ++ invalidos(plano)
+    # ordem de pergunta (a Iara pergunta uma por vez): destino, o que o destino exige, criativo, dinheiro, janela, publico, meta, invalidos
+    destino ++ exigencias_faltando(plano) ++ campos ++ invalidos(plano)
   end
+
+  @doc "Plano sem nenhum conteudo (so id/status): o corretor ainda nao disse nada util (ex.: um 'oi')."
+  def vazio?(plano), do: Map.drop(plano, ["id", "status", "atencao"]) == %{}
+
+  @doc "Como a Iara chama cada pendencia (o codigo fica no texto: o significado do erro nao depende da fala)."
+  def rotulo("destino"), do: "destino (para onde o anuncio leva: site, whatsapp ou formulario)"
+  def rotulo("url"), do: "url (o link do site)"
+  def rotulo("pixel"), do: "pixel (o codigo de rastreio do site)"
+  def rotulo("numero"), do: "numero (o whatsapp que recebe os contatos)"
+  def rotulo("formulario"), do: "formulario (o id do formulario)"
+  def rotulo("criativo"), do: "criativo (a imagem ou o video do anuncio, e o texto dele)"
+  def rotulo("orcamento_diario"), do: "orcamento_diario (quanto gastar por dia)"
+  def rotulo("teto_total"), do: "teto_total (o maximo para gastar no total)"
+  def rotulo("janela"), do: "janela (de que dia ate que dia roda)"
+  def rotulo("publico"), do: "publico (quem deve ver o anuncio)"
+  def rotulo("meta"), do: "meta (quantos resultados quer e quanto paga no maximo por cada um)"
+  def rotulo(outro), do: outro
 
   defp exigencias_faltando(plano) do
     exige = exigencias(plano["destino"])

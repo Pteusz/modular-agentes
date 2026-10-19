@@ -29,6 +29,7 @@ defmodule Trafego.Application do
 
     children = [
       Trafego.Repo,
+      Trafego.Iara.Memoria,
       %{id: :migrar_oban, start: {Trafego.Banco, :migrar_oban, []}},
       {Oban, oban_config()}
     ]

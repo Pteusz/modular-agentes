@@ -12,7 +12,7 @@ defmodule Trafego.IA.OpenAI do
   @destinos ~w(site whatsapp formulario)
 
   @impl true
-  def chamar(faixa, tarefa, entrada) when faixa in [:pequena, :media] and tarefa in [:planejar, :confirmar] do
+  def chamar(faixa, tarefa, entrada) when faixa in [:pequena, :media] and tarefa in [:planejar, :confirmar, :falar, :horario, :checar_transcricao] do
     with {:ok, chave} <- chave(),
          {:ok, modelo} <- modelo(faixa),
          {:ok, corpo} <- pedir(chave, corpo(faixa, modelo, tarefa, entrada)),
@@ -98,6 +98,28 @@ defmodule Trafego.IA.OpenAI do
     base(faixa, modelo, "confirmar", instrucao_confirmar(), confirmar_schema(), %{"plano_resumo" => e["resumo"], "resposta_do_corretor" => e["texto"]})
   end
 
+  # a fala leva a persona da Iara; o texto-base (fatos decididos pelo codigo) e a conversa do corretor vao como dados
+  defp corpo(faixa, modelo, :falar, e) do
+    base(faixa, modelo, "falar", Trafego.Iara.persona() <> instrucao_falar(), texto_schema(), %{
+      "situacao" => e["situacao"],
+      "texto_base_com_os_fatos" => e["base"],
+      "mensagem_do_corretor" => e["mensagem_do_corretor"],
+      "veio_por" => e["origem"],
+      "primeiro_contato_se_apresente" => e["primeiro_contato"],
+      "termine_perguntando_o_melhor_horario_das_atualizacoes_diarias" => e["perguntar_horario"],
+      "nao_repita_o_texto_base_so_apresente_e_pergunte" => e["omitir_base"],
+      "dados" => e["dados"]
+    })
+  end
+
+  defp corpo(faixa, modelo, :horario, e) do
+    base(faixa, modelo, "horario", instrucao_horario(), horario_schema(), %{"resposta_do_corretor" => e["texto"]})
+  end
+
+  defp corpo(faixa, modelo, :checar_transcricao, e) do
+    base(faixa, modelo, "checar_transcricao", instrucao_checar(), duvida_schema(), %{"transcricao_do_audio" => e["transcricao"]})
+  end
+
   defp base(faixa, modelo, nome, instrucao, schema, usuario) do
     %{
       "model" => modelo, "store" => false, "max_output_tokens" => Config.openai(:max_tokens, 4000),
@@ -149,6 +171,12 @@ defmodule Trafego.IA.OpenAI do
   defp validar(:confirmar, %{"decisao" => d} = s) when d in @decisoes, do: {:ok, Map.take(s, ["decisao"])}
   defp validar(:confirmar, _), do: {:error, :saida_invalida}
   defp validar(:planejar, %{} = plano), do: {:ok, %{"plano" => limpar(plano)}}
+  defp validar(:falar, %{"texto" => t}) when is_binary(t), do: {:ok, %{"texto" => t}}
+  defp validar(:falar, _), do: {:error, :saida_invalida}
+  defp validar(:horario, %{"horario" => h}) when is_binary(h) or is_nil(h), do: {:ok, %{"horario" => h}}
+  defp validar(:horario, _), do: {:error, :saida_invalida}
+  defp validar(:checar_transcricao, %{"duvida" => d}) when is_binary(d) or is_nil(d), do: {:ok, %{"duvida" => d}}
+  defp validar(:checar_transcricao, _), do: {:error, :saida_invalida}
 
   # nulos (campo nao informado) saem; o dominio so ve o que o corretor disse
   defp limpar(m) when is_map(m) do
@@ -174,6 +202,38 @@ defmodule Trafego.IA.OpenAI do
     "sim" so se for uma autorizacao clara para executar; "nao" se recusou ou mandou cancelar; "ambiguo" em qualquer duvida,
     condicao, pergunta, pedido de mudanca ou assunto diferente. Na duvida, "ambiguo".
     """
+
+  defp instrucao_falar,
+    do: """
+
+    TAREFA: escreva a SUA mensagem ao corretor a partir do "texto_base_com_os_fatos". Diga os mesmos fatos com as suas palavras, na voz da Iara, curto.
+    Se "primeiro_contato_se_apresente" for true, comece se apresentando (nome, equipe Ataque Total da Cury Construtora, que e uma IA, que se adapta ao jeito dele e aprende com o tempo).
+    Se "termine_perguntando_o_melhor_horario_das_atualizacoes_diarias" for true, termine perguntando o melhor horario para as atualizacoes diarias e diga que, sem resposta, usa 9h e da para mudar depois; as atualizacoes nao podem ser desligadas.
+    Se "nao_repita_o_texto_base_so_apresente_e_pergunte" for true, nao repita o texto base. Se "veio_por" for audio, trate como se ele tivesse escrito; so fale do audio se o texto base disser que ficou duvida.
+    Mantenha TODOS os numeros, valores em R$, datas e ids do texto base exatamente como estao. Nunca peca mais de uma coisa por mensagem.
+    """
+
+  defp instrucao_horario,
+    do: """
+    O corretor respondeu a pergunta sobre o melhor horario para receber atualizacoes diarias. Devolva o horario que ele escolheu em "HH:MM" (24h, ex.: "08:30").
+    Se ele nao disse um horario claro (ou falou de outro assunto), devolva null. Nao invente.
+    """
+
+  defp instrucao_checar,
+    do: """
+    Voce confere a transcricao automatica de um audio de WhatsApp de um corretor de imoveis (portugues, campanhas de anuncios). Se algo importante ficou duvidoso,
+    cortado, sem sentido ou ambiguo (palavra estranha, numero ou valor incerto, pedido que pode ter dois sentidos), devolva em "duvida" uma frase curta dizendo O QUE ficou ambiguo.
+    Se a transcricao esta clara e coerente, devolva null. Na duvida sobre pedidos que mudam campanhas (ativar, pausar, valores), prefira apontar a duvida.
+    """
+
+  defp texto_schema,
+    do: %{"type" => "object", "additionalProperties" => false, "required" => ["texto"], "properties" => %{"texto" => %{"type" => "string"}}}
+
+  defp horario_schema,
+    do: %{"type" => "object", "additionalProperties" => false, "required" => ["horario"], "properties" => %{"horario" => %{"type" => ["string", "null"]}}}
+
+  defp duvida_schema,
+    do: %{"type" => "object", "additionalProperties" => false, "required" => ["duvida"], "properties" => %{"duvida" => %{"type" => ["string", "null"]}}}
 
   defp confirmar_schema,
     do: %{"type" => "object", "additionalProperties" => false, "required" => ["decisao"], "properties" => %{"decisao" => %{"type" => "string", "enum" => @decisoes}}}
