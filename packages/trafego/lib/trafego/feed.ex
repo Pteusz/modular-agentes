@@ -4,20 +4,17 @@ defmodule Trafego.Feed do
   consultar. Adaptador atual: dump .sql em Config.feed_dir (importar/1, importar_do_diretorio/0); uma conexao MySQL somente leitura
   pode entrar depois como outro adaptador, sem mudar quem consulta.
   Mapeamento: id -> id; nome; regiao -> bairro; regiao_base -> regiao; dormitorios (texto livre, vazio = nao informado);
-  valor -> "a partir de" em centavos (0 = sem preco, nunca inventado); estado_obra (se vazio, estagio_obra) -> status;
-  esgotado = estado_obra Esgotado/Vendido (sem diferenca de maiusculas/acentos); imagem; updated_at.
-  Esgotado vira evento do plano e PROPOSTA de pausar (a pausa so acontece com confirmacao).
+  valor -> "a partir de" em centavos (0 = sem preco, nunca inventado); imagem; updated_at.
+  estado_obra (se vazio, estagio_obra) fica em estado_original, SO informativo (ex.: "Lancamento"): imovel nao tem status e esse
+  texto nunca vira evento, proposta nem bloqueio (decisao do Mateus, 4.6).
   """
-  alias Nucleo.Registro
-  alias Trafego.{Banco, Config, Evento, Notificar, Plano, Proposta}
+  alias Trafego.{Banco, Config}
   alias Trafego.Feed.Dump
 
-  @esgotados ["esgotado", "vendido", "sold out"]
-  @nome "Nucleo.Automacoes.Trafego"
 
   def fonte, do: Config.feed_fonte()
 
-  @doc "Importa um dump .sql. {:ok, %{importados: n, esgotados: [ids]}}"
+  @doc "Importa um dump .sql. {:ok, %{importados: n}}"
   def importar(caminho, opts \\ []) do
     fonte = opts[:fonte] || fonte()
 
@@ -27,17 +24,17 @@ defmodule Trafego.Feed do
       for l <- linhas do
         Banco.q(
           """
-          INSERT INTO feed_imoveis (fonte, id, nome, bairro, regiao, dormitorios, valor_centavos, status, estado_original, imagem, atualizado_em)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          INSERT INTO feed_imoveis (fonte, id, nome, bairro, regiao, dormitorios, valor_centavos, estado_original, imagem, atualizado_em)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
           ON CONFLICT (fonte, id) DO UPDATE SET nome = EXCLUDED.nome, bairro = EXCLUDED.bairro, regiao = EXCLUDED.regiao,
-            dormitorios = EXCLUDED.dormitorios, valor_centavos = EXCLUDED.valor_centavos, status = EXCLUDED.status,
+            dormitorios = EXCLUDED.dormitorios, valor_centavos = EXCLUDED.valor_centavos,
             estado_original = EXCLUDED.estado_original, imagem = EXCLUDED.imagem, atualizado_em = EXCLUDED.atualizado_em, importado_em = now()
           """,
-          [fonte, l.id, l.nome, l.bairro, l.regiao, l.dormitorios, l.valor_centavos, l.status, l.estado_original, l.imagem, l.atualizado_em]
+          [fonte, l.id, l.nome, l.bairro, l.regiao, l.dormitorios, l.valor_centavos, l.estado_original, l.imagem, l.atualizado_em]
         )
       end
 
-      {:ok, %{importados: length(linhas), esgotados: for(l <- linhas, l.status == "esgotado", do: l.id)}}
+      {:ok, %{importados: length(linhas)}}
     end
   end
 
@@ -55,38 +52,15 @@ defmodule Trafego.Feed do
 
   def imovel(id) do
     case Banco.q(
-           "SELECT id, nome, bairro, regiao, dormitorios, valor_centavos, status, estado_original, imagem, atualizado_em FROM feed_imoveis WHERE fonte = $1 AND id = $2",
+           "SELECT id, nome, bairro, regiao, dormitorios, valor_centavos, estado_original, imagem, atualizado_em FROM feed_imoveis WHERE fonte = $1 AND id = $2",
            [fonte(), to_string(id)]
          ).rows do
-      [[i, n, b, r, d, v, s, e, im, at]] ->
-        %{id: i, nome: n, bairro: b, regiao: r, dormitorios: d, valor_centavos: v, status: s, estado_original: e, imagem: im, atualizado_em: at}
+      [[i, n, b, r, d, v, e, im, at]] ->
+        %{id: i, nome: n, bairro: b, regiao: r, dormitorios: d, valor_centavos: v, estado_original: e, imagem: im, atualizado_em: at}
 
       _ ->
         nil
     end
-  end
-
-  def esgotado?(nil), do: false
-  def esgotado?(id), do: match?(%{status: "esgotado"}, imovel(id))
-
-  @doc "Confere os planos ATIVOS com imovel: esgotado -> evento (uma vez por plano), aviso e proposta de pausar. `tenants:` restringe (teste)."
-  def verificar_planos(opts \\ []) do
-    tenants = opts[:tenants] || Registro.tenants_da(@nome)
-
-    for t <- tenants, %{"status" => "ativa", "imovel" => im} = p <- Plano.listar(t), im not in [nil, ""], esgotado?(im), p["esgotado_avisado"] != true do
-      Evento.emitir(t, "operacao", p["id"], "monitor", "imovel_esgotado", %{"imovel" => im})
-      Plano.salvar(t, Map.put(p, "esgotado_avisado", true))
-
-      prop = Proposta.aberta(t, "pausar", p["id"]) || Proposta.criar(t, "pausar", p["id"], %{"motivo" => "imovel_esgotado"})
-      nome = (imovel(im) || %{})[:nome] || im
-
-      Notificar.enviar(
-        t,
-        "O imovel #{nome} aparece como esgotado no feed e o plano #{p["id"]} segue com a campanha ativa. Propus pausar (proposta #{prop["id"]}); responda confirmando para eu pausar."
-      )
-    end
-
-    :ok
   end
 
   # ---- mapeamento
@@ -100,7 +74,6 @@ defmodule Trafego.Feed do
       regiao: vazio(row["regiao_base"]),
       dormitorios: vazio(row["dormitorios"]),
       valor_centavos: centavos(row["valor"]),
-      status: if(estado && normalizar(estado) in @esgotados, do: "esgotado", else: "disponivel"),
       estado_original: estado,
       imagem: vazio(row["imagem"]),
       atualizado_em: vazio(row["updated_at"])
@@ -110,7 +83,6 @@ defmodule Trafego.Feed do
   defp vazio(nil), do: nil
   defp vazio(s), do: (case String.trim(to_string(s)) do "" -> nil; v -> v end)
 
-  defp normalizar(s), do: s |> String.downcase() |> :unicode.characters_to_nfd_binary() |> String.replace(~r/\p{Mn}/u, "") |> String.trim()
 
   @doc false
   def centavos(nil), do: nil

@@ -18,13 +18,24 @@ defmodule GestaoEquipe.Papeis do
     :ok
   end
 
-  def definir_admin(%{id: id}, por) do
-    q("INSERT INTO ge_papeis (usuario_id, papel, criado_por) VALUES ($1,'admin',$2) ON CONFLICT (usuario_id) DO NOTHING", [id, por.id])
+  def definir_admin(%{id: id}, por, equipe) do
+    q("INSERT INTO ge_papeis (usuario_id, papel, criado_por, equipe) VALUES ($1,'admin',$2,$3) ON CONFLICT (usuario_id) DO NOTHING", [id, por.id, equipe])
     :ok
   end
 
+  @doc """
+  A equipe do dono/admin: o tenant do dono. Cada um tem tenant PROPRIO (WhatsApp, campanhas, conversa); a equipe so reune quem gere os corretores.
+  Papel antigo sem equipe gravada = o tenant do proprio usuario (o dono sempre foi o tenant da equipe).
+  """
+  def equipe(%{id: id, tenant_id: t}) when is_integer(id) do
+    case q("SELECT equipe FROM ge_papeis WHERE usuario_id=$1", [id]).rows do
+      [[e]] when is_binary(e) -> e
+      _ -> t
+    end
+  end
+
   def admins(equipe) do
-    q("SELECT u.id, u.nome, u.email, p.papel FROM ge_papeis p JOIN pb_usuarios u ON u.id=p.usuario_id WHERE u.tenant_id=$1 ORDER BY p.papel, u.nome", [equipe]).rows
+    q("SELECT u.id, u.nome, u.email, p.papel FROM ge_papeis p JOIN pb_usuarios u ON u.id=p.usuario_id WHERE COALESCE(p.equipe, u.tenant_id)=$1 ORDER BY p.papel, u.nome", [equipe]).rows
     |> Enum.map(fn [id, nome, email, papel] -> %{id: id, nome: nome, email: email, papel: papel} end)
   end
 end

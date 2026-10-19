@@ -6,7 +6,7 @@ defmodule GestaoEquipe.EquipeController do
   use Phoenix.Controller, formats: [:html], layouts: [html: {PainelBase.Layouts, :app}]
   import Plug.Conn
 
-  @nav [{"/equipe", "Painel", :painel}, {"/equipe/corretores", "Equipe", :equipe}, {"/equipe/ia", "IA", :ia}, {"/equipe/alertas", "Alertas", :alertas}]
+  @nav [{"/equipe", "Painel", :painel}, {"/equipe/corretores", "Equipe", :equipe}, {"/equipe/ia", "IA", :ia}, {"/equipe/alertas", "Alertas", :alertas}, {"/", "Meu agente", :agente}]
   @campos ~w(nome sobrenome usuario email numero filiacao site pagina_id gerenciador_id instagram_id pixel_id)
 
   defp ator(conn), do: conn.assigns.usuario
@@ -78,6 +78,15 @@ defmodule GestaoEquipe.EquipeController do
   def alertas(conn, _), do: pagina(conn, :alertas, :alertas, itens: GestaoEquipe.alertas(ator(conn)))
   def auditoria(conn, _), do: pagina(conn, :auditoria, :painel, itens: GestaoEquipe.auditoria(ator(conn), 100))
 
+  def minha_conta(conn, _), do: pagina(conn, :minha_conta, :agente, falha: nil)
+
+  def salvar_conta(conn, params) do
+    case GestaoEquipe.minha_conta(ator(conn), Map.take(params, ~w(token pagina_id gerenciador_id instagram_id pixel_id))) do
+      :ok -> redirect(conn, to: "/equipe/minha-conta?aviso=conta_salva")
+      {:error, e} -> conn |> put_status(422) |> pagina(:minha_conta, :agente, falha: codigo(e))
+    end
+  end
+
   def admins(conn, _) do
     if GestaoEquipe.papel(ator(conn)) == :dono,
       do: pagina(conn, :admins, :painel, itens: GestaoEquipe.admins(ator(conn)), falha: nil),
@@ -117,7 +126,8 @@ defmodule GestaoEquipe.EquipeHTML do
     "reativado" => "Corretor reativado.",
     "sincronizado" => "Dados atualizados.",
     "excluido" => "Corretor excluído: dados pessoais apagados e WhatsApp desvinculado. A campanha na Meta não foi apagada.",
-    "admin_criado" => "Admin criado. O convite foi enviado por e-mail."
+    "admin_criado" => "Admin criado. O convite foi enviado por e-mail.",
+    "conta_salva" => "Conta de anúncios salva."
   }
   @erros %{
     "duplicado_usuario" => "Esse usuário já está em uso.",
@@ -180,6 +190,7 @@ defmodule GestaoEquipe.EquipeHTML do
   def acao_txt("corretor.excluir"), do: "Excluiu corretor"
   def acao_txt("corretor.sincronizar"), do: "Atualizou dados do corretor"
   def acao_txt("admin.criar"), do: "Criou admin"
+  def acao_txt("conta.cadastrar"), do: "Cadastrou a própria conta de anúncios"
   def acao_txt(a), do: a
 
   # ---- pecas
@@ -440,6 +451,25 @@ defmodule GestaoEquipe.EquipeHTML do
       <.campo nome="email" rotulo="E-mail" tipo="email" req />
       <button type="submit" class="botao">Enviar convite</button>
     </form>
+    """
+  end
+
+  def minha_conta(assigns) do
+    ~H"""
+    <h1>Minha conta de anúncios</h1>
+    <.mensagens aviso={@aviso} erro={@erro} />
+    <p :if={@falha} class="aviso erro" role="alert"><span class="simbolo" aria-hidden="true">✕</span> {erro_txt(@falha)}</p>
+    <p class="apoio">Seu agente (WhatsApp, plano e campanhas) é só seu, como o de um corretor. Aqui você liga a sua conta de anúncios; o token fica cifrado.</p>
+    <form method="post" action="/equipe/minha-conta" class="formulario">
+      <.csrf />
+      <.campo nome="token" rotulo="Token de acesso" tipo="password" req dica="Fica cifrado; ninguém o vê depois." />
+      <.campo nome="gerenciador_id" rotulo="Id do gerenciador de anúncios" req />
+      <.campo nome="pagina_id" rotulo="Id da página" />
+      <.campo nome="instagram_id" rotulo="Id do Instagram" />
+      <.campo nome="pixel_id" rotulo="Id do pixel" />
+      <button type="submit" class="botao">Salvar</button>
+    </form>
+    <p class="apoio"><a href="/conta">WhatsApp e acesso</a> · <a href="/agente">Plano do agente</a> · <a href="/campanhas">Campanhas</a></p>
     """
   end
 

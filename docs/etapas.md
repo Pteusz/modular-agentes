@@ -94,15 +94,21 @@ TESTE GERAL 4.3: convite -> senha -> login -> ver campanhas proprias -> QR/estad
 TESTE GERAL 4.4: admin cadastra corretor -> tenant vinculado -> corretor completa pelo convite; desativar bloqueia o agente; excluir apaga dados pessoais; admin nao ve a conversa propria; instancia de uma pessoa funciona sem este pacote.
 
 4.5 Fase 2: ativacao com confirmacao
-- STATUS: implementada na branch etapa-4-5, teste geral (10 testes) e etapas anteriores passando; AGUARDA APROVACAO (sem merge, sem tags). Decisoes aprovadas pelo Mateus: feed = dump .sql da wp_produtos importado para feed_imoveis (esgotado = estado_obra Esgotado/Vendido); cotacao = PTAX do Banco Central; teto_total obrigatorio + maximo por tenant + teto mensal de IA em R$ por corretor. Ativacao real na Meta segue travada.
+- STATUS: implementada na branch etapa-4-5, teste geral (10 testes) e etapas anteriores passando; AGUARDA APROVACAO (sem merge, sem tags). Decisoes aprovadas pelo Mateus: feed = dump .sql da wp_produtos importado para feed_imoveis (estado_obra e so informativo desde a 4.6); cotacao = PTAX do Banco Central; teto_total obrigatorio + maximo por tenant + teto mensal de IA em R$ por corretor. Ativacao real na Meta segue travada.
 - Ativar campanha somente com confirmacao em texto livre; monitor agendado (Oban) compara resultado e meta (meta batida, desvio, dados insuficientes); relatorios com limite de frequencia e resumo; desvio que queima verba pode alertar na hora; ajuste sempre como proposta confirmada.
 - Custo de IA em R$ com cotacao diaria e teto por corretor (aviso e bloqueio); proponha a fonte da cotacao e o teto por campanha (paradas).
-- Feed de imoveis: o Mateus expoe; aqui so a leitura e o status esgotado vira evento do plano propondo pausar.
+- Feed de imoveis: o Mateus expoe; aqui so a leitura sem status de imovel (4.6 retirou o esgotado).
 - Fim: decidir Nucleo.Passo com dois exemplos.
-TESTE GERAL 4.5: ativacao so apos confirmacao clara; desvio gera proposta e nao alteracao; teto de IA bloqueia; esgotado propoe pausar.
+TESTE GERAL 4.5: ativacao so apos confirmacao clara; desvio gera proposta e nao alteracao; teto de IA bloqueia (a regra de esgotado saiu na 4.6).
 
 FORA DO ESCOPO
 Publico de pessoas e LAL, etapas encadeadas, modelo de plano escrito pela equipe, Google Ads, criacao de pixel/eventos, funil depois do clique, redes sociais, 2 fatores.
 
 PRONTO (cada sub-etapa)
 Teste geral passando, mix test das etapas anteriores passando, docs/estado.md e docs/etapas.md atualizados, resumo de ate 10 linhas, PARADA para aprovacao antes do merge.
+
+4.6 Correcoes (Mateus)
+- STATUS: branch etapa-4-6; teste test/etapa46_test.exs. AGUARDA APROVACAO (sem merge, sem tags).
+- Correcao 1 (feita): imovel nao tem status. Sai a regra esgotado/vendido -> evento + proposta de pausar + bloqueio de ativacao (trafego 1.4.1). Feed serve id, nome, bairro/regiao, dormitorios, valor, imagem, url, data; estado_obra so informativo.
+- Correcao 2 (feita; teste test/etapa46b_test.exs): dono e admin com tenant proprio (o do dono, `mateus`, e preservado e so ganha vinculos), WhatsApp/QR, plano + confirmacao e campanhas como o corretor, telas de corretor + atalhos, isolamento e privacidade, desativar/excluir e auditoria mantidos. gestao-equipe 1.1.0, painel-base 1.1.1.
+- Implantacao (depende de aprovacao): mix equipe.garantir EMAIL do dono; reiniciar o painel.

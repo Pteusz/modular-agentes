@@ -50,7 +50,7 @@ A5. Todo ajuste e uma proposta com confirmacao do corretor. Relatar e autonomo, 
 A6. Eventos do tenant: pedido, plano, confirmacao, operacao, verificacao, resultado e custo em tokens. A aba IA e uma projecao desses eventos.
 A7. Aprendizado minimo por tenant: registro da situacao (destino, publico, orcamento, criativo), da acao e do resultado contra a meta, com a regra violada nomeada. Ao propor um ajuste, le registros de situacoes parecidas. A promocao ao catalogo da automacao e manual.
 A8. Criativo: enviado pelo corretor no WhatsApp. Um verificador decidivel confere formato, proporcao e resolucao, e o agente confirma a que plano ele pertence.
-A9. Feed de imoveis: o Mateus expoe. Campos sugeridos: id estavel, nome, bairro e regiao, dormitorios, faixa de preco, status, imagem principal e data de atualizacao. Status esgotado vira evento do plano e propoe pausar.
+A9. Feed de imoveis: o Mateus expoe. Campos: id estavel, nome, bairro e regiao, dormitorios, faixa de preco, imagem principal, url e data de atualizacao. Imovel nao tem status (nao existe esgotado nem vendido); estado/estagio da obra e so informativo e nunca vira evento, proposta nem bloqueio. [Regra de esgotado retirada por decisao do Mateus, 2026-10-19.]
 A10. Fases: (1) pedido, plano, confirmacao, criacao pausada e verificacao; (2) ativacao com confirmacao, monitor e relatorios; (3) ajuste proposto e aprendizado.
 A11. Fora da v1 (encaixes para a versao final): etapas encadeadas, publico de pessoas e LAL, modelo de plano escrito pela equipe, criacao de pixel e eventos, e funil depois do clique por informe do corretor.
 

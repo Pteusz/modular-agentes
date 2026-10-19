@@ -32,6 +32,8 @@ defmodule GestaoEquipe.Banco do
             atualizado_em timestamptz NOT NULL DEFAULT now()
           )
           """,
+          # 4.6: dono e admin tem tenant proprio; `equipe` e o tenant do dono. Linha antiga sem equipe = tenant do proprio usuario.
+          "ALTER TABLE ge_papeis ADD COLUMN IF NOT EXISTS equipe text",
           "CREATE UNIQUE INDEX IF NOT EXISTS ge_corretores_usuario ON ge_corretores (lower(usuario))",
           "CREATE UNIQUE INDEX IF NOT EXISTS ge_corretores_email ON ge_corretores (lower(email))",
           "CREATE UNIQUE INDEX IF NOT EXISTS ge_corretores_numero ON ge_corretores (numero)",

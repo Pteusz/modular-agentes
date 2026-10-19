@@ -62,10 +62,13 @@ defmodule Trafego.Banco do
     q("""
     CREATE TABLE IF NOT EXISTS feed_imoveis (
       fonte text NOT NULL, id text NOT NULL, nome text, bairro text, regiao text, dormitorios text, valor_centavos bigint,
-      status text NOT NULL, estado_original text, imagem text, atualizado_em text, importado_em timestamptz NOT NULL DEFAULT now(),
+      estado_original text, imagem text, atualizado_em text, importado_em timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (fonte, id)
     )
     """)
+
+    # 4.6: imovel nao tem status (espelho derivado do feed; a proxima importacao repovoa)
+    q("ALTER TABLE feed_imoveis DROP COLUMN IF EXISTS status")
 
     :ok
   end
@@ -102,13 +105,13 @@ defmodule Trafego.Workers.Cotacao do
 end
 
 defmodule Trafego.Workers.Feed do
-  @moduledoc "Importa o dump .sql mais recente de Trafego.Config.feed_dir e confere os planos com imovel (esgotado -> evento e proposta de pausar)."
+  @moduledoc "Importa o dump .sql mais recente de Trafego.Config.feed_dir."
   use Oban.Worker, queue: :trafego, max_attempts: 3
 
   @impl Oban.Worker
   def perform(_job) do
     case Trafego.Feed.importar_do_diretorio() do
-      {:ok, _} -> Trafego.Feed.verificar_planos()
+      {:ok, _} -> :ok
       {:error, :sem_arquivo} -> :ok
       {:error, e} -> {:error, e}
     end
