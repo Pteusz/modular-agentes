@@ -458,7 +458,18 @@ defmodule Trafego.Agente do
     Evento.emitir(tenant, "operacao", plano["id"], "planejador", "criativo_recebido", %{"formato" => info.formato, "largura" => info.largura, "altura" => info.altura})
 
     # plano ja aceito esperando so o criativo: com ele, executa (campanha PAUSADA); senao volta a conferir o plano
-    if plano["status"] == "aguardando_criativo", do: executar_plano(tenant, plano), else: concluir_plano(tenant, plano)
+    case plano["status"] do
+      "aguardando_criativo" ->
+        executar_plano(tenant, plano)
+
+      # plano ja mostrado, so faltava a foto: nao reenvia o plano, so confirma que recebeu e pede o sim
+      "aguardando_confirmacao" ->
+        Plano.salvar(tenant, plano)
+        {:ok, "Recebi a foto, esta ok. Confirma pra eu criar tudo pausado?", situacao: :plano, plano_id: plano["id"]}
+
+      _ ->
+        concluir_plano(tenant, plano)
+    end
   end
 
   # credencial ausente ou recusada pela plataforma: o agente nao gasta IA nem tenta nada ate o corretor recadastrar
@@ -518,15 +529,16 @@ defmodule Trafego.Agente do
     plano = Plano.salvar(tenant, Map.put(plano, "status", "aguardando_confirmacao"))
     Evento.emitir(tenant, "plano", plano["id"], "planejador", "aguardando_confirmacao")
 
-    atencao =
-      if plano["atencao"] == [], do: "", else: " Atencao: em situacao parecida a verificacao acusou #{Enum.join(plano["atencao"], ", ")}; vou conferir isso de novo."
-
     case antes && Ficha.diferencas(antes, plano) do
-      nil -> {:ok, List.update_at(Ficha.mensagens(plano), -1, &(&1 <> atencao)), situacao: :plano, plano_id: plano["id"]}
+      nil -> {:ok, Ficha.mensagens(plano), situacao: :plano, plano_id: plano["id"]}
       [] -> {:ok, "Nao vi nada diferente no plano #{plano["id"]}. O que voce quer mudar?"}
       diferentes -> {:ok, diferentes, situacao: :plano, plano_id: plano["id"]}
     end
   end
+
+  # uma fala so: a duvida e, se faltar algo, o que falta (um item vai na mesma frase, sem lista nem cabecalho)
+  defp duvida_e_perguntas(duvida, [item], plano, _), do: duvida <> " Alem disso, me diz " <> Ficha.pedido(item, plano) <> "."
+  defp duvida_e_perguntas(duvida, _itens, _plano, perguntas), do: duvida <> "\n" <> perguntas
 
   defp perguntar(tenant, plano, itens, texto, extras) do
     plano = if "teto_total" in itens, do: Ficha.perguntar(plano, ["teto_total"]), else: plano
@@ -547,7 +559,7 @@ defmodule Trafego.Agente do
         itens == [] -> duvida
         duvida == nil -> perguntas
         perguntou -> duvida <> "\n" <> perguntas
-        true -> [duvida, perguntas]
+        true -> duvida_e_perguntas(duvida, itens, plano, perguntas)
       end
 
     contexto = %{
@@ -642,14 +654,30 @@ defmodule Trafego.Agente do
         {:ok,
          "Criei a campanha #{cid} pausada (nada foi ativado). " <>
            case verif do
-             :ok -> "Verificacao: confere com o plano."
-             {:divergente, regras} -> "Verificacao acusou divergencia: #{Enum.join(regras, ", ")}."
+             :ok -> "Conferi na Meta e esta igual ao plano."
+             {:divergente, regras} -> "Mas conferi na Meta e #{Enum.map_join(regras, "; ", &divergencia/1)}. Confere la antes de ativar."
              {:error, _} -> "Nao consegui reler a campanha para verificar."
            end}
 
       {:error, e} ->
         # o plano continua o atual (status erro, ficha preservada): o corretor so ajusta o que falhou, sem repetir tudo
         {:ok, falha(tenant, plano, e)}
+    end
+  end
+
+  # divergencia do verificador em portugues claro (nunca o nome interno da regra)
+  @doc false
+  def divergencia(regra) do
+    case to_string(regra) do
+      "status_pausada" -> "a campanha nao esta pausada"
+      "conta_igual" -> "a conta de anuncios e outra"
+      "destino_igual" -> "o destino do anuncio ficou diferente do plano"
+      "orcamento_diario_igual" -> "o orcamento diario ficou diferente do plano"
+      "teto_igual" -> "o teto total ficou diferente do plano"
+      "janela_igual" -> "as datas ficaram diferentes do plano"
+      "publico_igual" -> "o publico ficou diferente do plano"
+      "criativo_igual" -> "a foto ou o texto do anuncio ficou diferente do plano"
+      _ -> "algo ficou diferente do plano"
     end
   end
 

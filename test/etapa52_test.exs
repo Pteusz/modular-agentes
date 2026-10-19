@@ -167,7 +167,7 @@ defmodule Etapa52Test do
     for f <- ["uma coisa de cada vez", "o resto a gente vê depois", "o resto a gente ve depois", "uma coisa por vez"], do: refute(txt =~ f)
 
     t2 = tenant_pronto()
-    [amb, _perguntas] = dizer(t2, "pedido objetivo vender; imovel Torre Sul; ambiguidade R$ 500 pode ser por dia ou no total")
+    [amb] = dizer(t2, "pedido objetivo vender; imovel Torre Sul; ambiguidade R$ 500 pode ser por dia ou no total")
     assert amb =~ "duvida" and amb =~ "R$ 500" and amb =~ "Me confirma?"
     assert Plano.atual(t2)["orcamento_diario"] == nil
   end

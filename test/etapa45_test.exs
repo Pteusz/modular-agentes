@@ -127,7 +127,7 @@ defmodule Etapa45Test do
     t = "tp5_#{System.unique_integer([:positive])}"
     conta = vincular(t)
     r = resp(Agente.processar(t, @pedido))
-    assert r =~ "teto_acima_do_maximo"
+    assert r =~ "passou do maximo"
     assert %{"status" => "rascunho"} = Plano.atual(t)
     assert Simulada.todas() |> Enum.filter(&(&1["conta_id"] == conta)) == []
   end

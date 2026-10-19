@@ -17,6 +17,9 @@ defmodule Nucleo.Automacoes.Trafego do
       exige: %{"registro" => "1.0", "gancho" => "1.0", "canal.texto" => "1.0"}
     }
 
+  # a Meta devolve "act_<id>"; o tenant guarda so o numero (ou com act_): compara sem o prefixo
+  defp sem_act(id), do: id |> to_string() |> String.replace_prefix("act_", "")
+
   @doc "Verificador decidivel: o que a plataforma devolveu bate com o plano. ctx: %{plano, campanha, conta_id}."
   @impl Nucleo.Automacao
   def referencial do
@@ -26,7 +29,7 @@ defmodule Nucleo.Automacoes.Trafego do
       tipo: :decidivel,
       regras: [
         %{nome: :status_pausada, ok?: fn %{campanha: c} -> c["status"] == "PAUSADA" end},
-        %{nome: :conta_igual, ok?: fn %{campanha: c, conta_id: id} -> c["conta_id"] == id end},
+        %{nome: :conta_igual, ok?: fn %{campanha: c, conta_id: id} -> sem_act(c["conta_id"]) == sem_act(id) end},
         %{nome: :destino_igual, ok?: igual.("destino")},
         %{nome: :orcamento_diario_igual, ok?: igual.("orcamento_diario")},
         %{nome: :teto_igual, ok?: igual.("teto_total")},
