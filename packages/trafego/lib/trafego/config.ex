@@ -52,6 +52,12 @@ defmodule Trafego.Config do
     end
   end
 
+  @doc "Janela padrao sugerida pela Iara (dias a partir de hoje). Padrao 30."
+  def janela_padrao_dias, do: Application.get_env(:trafego, :janela_padrao_dias, 30)
+
+  @doc "Custo maximo por resultado sugerido quando o corretor nao diz, em centavos. Padrao R$ 15."
+  def custo_resultado_padrao_centavos, do: Application.get_env(:trafego, :custo_resultado_padrao_centavos, 1500)
+
   @doc "Horas minimas entre relatorios de um mesmo plano. Padrao 24."
   def relatorio_horas, do: Application.get_env(:trafego, :relatorio_horas, 24)
 

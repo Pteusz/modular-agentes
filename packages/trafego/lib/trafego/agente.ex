@@ -11,7 +11,7 @@ defmodule Trafego.Agente do
   so uma transcricao duvidosa gera uma pergunta "e isso mesmo?" antes de agir (a fala em duvida fica so em memoria).
   """
   alias Nucleo.Registro
-  alias Trafego.{Acesso, Aprendizado, Ativacao, Config, Criativo, Evento, Executor, IA, Iara, Plano, Proposta, TetoIA, Verificador}
+  alias Trafego.{Acesso, Aprendizado, Ativacao, Config, Criativo, Evento, Executor, Ficha, IA, Iara, Plano, Proposta, TetoIA, Verificador}
   alias Trafego.Iara.Memoria
 
   @nome "Nucleo.Automacoes.Trafego"
@@ -20,13 +20,28 @@ defmodule Trafego.Agente do
   # resposta curta ao horario: mais que isso e outro assunto (vale o padrao)
   @max_resposta_horario 80
 
+  @doc "Como `processar_mensagens/2`, mas com as mensagens do plano juntas num texto so (separadas por linha em branco)."
+  def processar(tenant, texto), do: tenant |> processar_mensagens(texto) |> juntar()
+
+  @doc "Como `receber_midia_mensagens/2`, com o texto juntado."
+  def receber_midia(tenant, msg), do: tenant |> receber_midia_mensagens(msg) |> juntar()
+
+  @doc "Como `receber_criativo_mensagens/3`, com o texto juntado."
+  def receber_criativo(tenant, nome, bytes), do: tenant |> receber_criativo_mensagens(nome, bytes) |> juntar()
+
+  defp juntar({:ok, [_ | _] = l}), do: {:ok, Enum.join(l, "
+
+")}
+  defp juntar(r), do: r
+
   @doc """
   Processa uma mensagem do corretor (texto, ou a transcricao de um audio). {:ok, resposta} | {:error, motivo}
+  `resposta` e um texto, ou uma lista de textos curtos (o plano sai em 4 a 5 mensagens; o Laco envia uma a uma).
   Ordem: fala de audio em duvida aguardando "e isso mesmo?"; resposta ao horario das atualizacoes; pedido de desligar/mudar o horario;
   plano aguardando confirmacao; proposta aberta (ativar/pausar) lida em texto curto; plano em rascunho; pedido curto de
   ativar/pausar (vira PROPOSTA); senao plano novo.
   """
-  def processar(tenant, texto), do: seguro(tenant, "texto", fn -> gate(tenant, texto, "texto", fn -> conversa(tenant, texto, "texto") end) end)
+  def processar_mensagens(tenant, texto), do: seguro(tenant, "texto", fn -> gate(tenant, texto, "texto", fn -> conversa(tenant, texto, "texto") end) end)
 
   # Nenhuma excecao deixa o corretor no silencio (o Laco so registra o evento): vira resposta amigavel. O evento leva so o tipo
   # da excecao (nunca a mensagem, que poderia carregar conteudo do corretor).
@@ -62,6 +77,7 @@ defmodule Trafego.Agente do
 
     cond do
       match?(%{"status" => "aguardando_confirmacao"}, plano) -> confirmar(tenant, plano, texto)
+      match?(%{"status" => "aguardando_criativo"}, plano) and intencao(texto) == nil -> esperar_criativo(tenant, plano, texto)
       prop != nil and curto?(texto) -> confirmar_proposta(tenant, prop, texto)
       match?(%{"status" => "rascunho"}, plano) -> planejar(tenant, plano, texto, "complemento")
       (tipo = intencao(texto)) != nil -> propor(tenant, tipo)
@@ -134,14 +150,19 @@ defmodule Trafego.Agente do
   # depois de responder o horario, volta ao que estava no ar (uma pergunta so)
   defp retomada(tenant) do
     case Plano.atual(tenant) do
-      %{"status" => "rascunho"} = p -> if Plano.vazio?(p), do: "", else: " " <> pergunta_pendente(Plano.pendencias(p))
+      %{"status" => "rascunho"} = p -> if Plano.vazio?(p), do: "", else: " " <> pergunta_pendente(tenant, p)
       %{"status" => "aguardando_confirmacao", "id" => id} -> " Sobre o plano #{id}: voce confirma?"
+      %{"status" => "aguardando_criativo", "id" => id} -> " Sobre o plano #{id}: falta so a foto ou o video do anuncio."
       _ -> ""
     end
   end
 
-  defp pergunta_pendente([]), do: ""
-  defp pergunta_pendente([primeira | _]), do: "Pra fechar o plano preciso de #{Plano.rotulo(primeira)}."
+  defp pergunta_pendente(tenant, plano) do
+    case Ficha.avaliar(tenant, plano) do
+      {:pergunta, _, itens} -> Ficha.perguntas(itens, true)
+      _ -> ""
+    end
+  end
 
   # fala em duvida (audio): o corretor responde por texto OU audio; "sim" processa a fala como texto
   defp audio_pendente(tenant, fala, texto, origem) do
@@ -183,7 +204,20 @@ defmodule Trafego.Agente do
   defp entregar(_tenant, {:error, _} = e, _, _, _), do: e
   defp entregar(tenant, {:ok, base}, texto, origem, opts), do: entregar(tenant, {:ok, base, []}, texto, origem, opts)
 
-  defp entregar(tenant, {:ok, base, extra}, texto, origem, opts) do
+  # plano em varias mensagens curtas (texto fixo, sem IA): so a apresentacao e a pergunta do horario se juntam
+  defp entregar(tenant, {:ok, [_ | _] = lista, _extra}, _texto, _origem, opts) do
+    perfil = Iara.perfil(tenant)
+    primeiro = perfil["apresentada"] != true
+    perguntar = perfil["horario_estado"] == "nao_perguntado" and Keyword.get(opts, :horario, true) and ocioso?(tenant)
+
+    if primeiro, do: Iara.atualizar(tenant, %{"apresentada" => true})
+    if perguntar, do: Iara.atualizar(tenant, %{"horario_estado" => "perguntado"})
+
+    lista = List.update_at(lista, 0, &Iara.compor(&1, primeiro: primeiro))
+    {:ok, if(perguntar, do: List.update_at(lista, -1, &Iara.compor(&1, pergunta_horario: true)), else: lista)}
+  end
+
+  defp entregar(tenant, {:ok, base, extra}, texto, origem, opts) when is_binary(base) do
     perfil = Iara.perfil(tenant)
     primeiro = perfil["apresentada"] != true
     nao_perguntado = perfil["horario_estado"] == "nao_perguntado"
@@ -195,13 +229,13 @@ defmodule Trafego.Agente do
     if perguntar, do: Iara.atualizar(tenant, %{"horario_estado" => "perguntado"})
 
     falar_opts = [texto: texto, origem: origem, primeiro: primeiro, pergunta_horario: perguntar, omitir_base: omitir]
-    {:ok, Iara.falar(tenant, base, falar_opts ++ Keyword.take(extra, [:situacao, :dados, :plano_id, :contexto]))}
+    {:ok, Iara.falar(tenant, base, falar_opts ++ Keyword.take(extra, [:situacao, :dados, :plano_id, :contexto, :fixo, :numeradas]))}
   end
 
   # nada pendente com o corretor (plano, proposta ou audio em duvida)
   defp ocioso?(tenant) do
     plano = Plano.atual(tenant)
-    (plano == nil or plano["status"] not in ["rascunho", "aguardando_confirmacao"]) and Proposta.atual(tenant) == nil and Memoria.pegar(tenant) == nil
+    (plano == nil or plano["status"] not in ["rascunho", "aguardando_confirmacao", "aguardando_criativo"]) and Proposta.atual(tenant) == nil and Memoria.pegar(tenant) == nil
   end
 
   # pedido de plano tem varios campos separados por ";" ou e longo: nao e resposta a uma proposta nem pedido de ativar/pausar
@@ -284,7 +318,7 @@ defmodule Trafego.Agente do
   Criativo enviado pelo corretor (bytes + nome do arquivo). Conferencia decidivel (Trafego.Criativo): reprovado nao entra e a
   resposta diz o motivo; aprovado e guardado e vira o criativo do plano em andamento, que volta a pedir confirmacao.
   """
-  def receber_criativo(tenant, nome, bytes), do: gate(tenant, nil, "texto", fn -> entregar(tenant, criativo(tenant, nome, bytes), nil, "texto") end)
+  def receber_criativo_mensagens(tenant, nome, bytes), do: gate(tenant, nil, "texto", fn -> entregar(tenant, criativo(tenant, nome, bytes), nil, "texto") end)
 
   defp criativo(tenant, nome, bytes) do
     case Plano.atual(tenant) do
@@ -303,13 +337,13 @@ defmodule Trafego.Agente do
   Midia que chegou pelo canal (Amarula). Baixa e passa pela mesma conferencia. Se nao der para baixar, avisa e propoe
   alternativa (mandar como documento ou colocar o arquivo no painel) em vez de fingir que recebeu.
   """
-  def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: :audio}} = msg), do: seguro(tenant, "audio", fn -> receber_audio(tenant, msg) end)
+  def receber_midia_mensagens(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: :audio}} = msg), do: seguro(tenant, "audio", fn -> receber_audio(tenant, msg) end)
 
-  def receber_midia(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: kind}} = msg) when kind in [:image, :document, :video] do
+  def receber_midia_mensagens(tenant, %Amarula.Msg{content: %Amarula.Content.Media{kind: kind}} = msg) when kind in [:image, :document, :video] do
     seguro(tenant, "midia", fn -> gate(tenant, nil, "texto", fn -> entregar(tenant, midia_criativo(tenant, msg), nil, "texto") end) end)
   end
 
-  def receber_midia(tenant, _msg) do
+  def receber_midia_mensagens(tenant, _msg) do
     gate(tenant, nil, "texto", fn -> entregar(tenant, {:ok, "So aceito imagem (png ou jpg) ou video mp4 como criativo, ou audio (nota de voz)."}, nil, "texto", horario: false) end)
   end
 
@@ -418,7 +452,9 @@ defmodule Trafego.Agente do
     texto = get_in(plano, ["criativo", "texto"])
     plano = Map.put(plano, "criativo", Map.reject(%{"midia" => nome, "texto" => texto}, fn {_, v} -> is_nil(v) end))
     Evento.emitir(tenant, "operacao", plano["id"], "planejador", "criativo_recebido", %{"formato" => info.formato, "largura" => info.largura, "altura" => info.altura})
-    concluir_plano(tenant, plano)
+
+    # plano ja aceito esperando so o criativo: com ele, executa (campanha PAUSADA); senao volta a conferir o plano
+    if plano["status"] == "aguardando_criativo", do: executar_plano(tenant, plano), else: concluir_plano(tenant, plano)
   end
 
   # credencial ausente ou recusada pela plataforma: o agente nao gasta IA nem tenta nada ate o corretor recadastrar
@@ -442,13 +478,14 @@ defmodule Trafego.Agente do
     case IA.chamar(tenant, :media, :planejar, %{"texto" => texto, "plano" => plano}) do
       {:ok, %{"plano" => parcial}, uso} ->
         Evento.custo(tenant, plano["id"], "planejador", "planejar", uso)
-        {plano, ignorados} = Plano.mesclar(plano, parcial)
+        antes = if plano["status"] == "aguardando_confirmacao", do: plano
+        {plano, ignorados, extras} = Ficha.aplicar(plano, parcial)
 
         # id de conta que veio do modelo e ignorado: a conta e a do registro do tenant
         if ignorados != [], do: Evento.emitir(tenant, "operacao", plano["id"], "planejador", "conta_do_modelo_ignorada", %{"erro" => "conta_do_modelo_ignorada"})
 
         plano = Map.put(plano, "atencao", Aprendizado.atencao(tenant, Plano.situacao(plano)))
-        concluir_plano(tenant, plano, texto)
+        concluir_plano(tenant, plano, texto, extras: extras, antes: antes)
 
       {:error, {:teto_ia, info}} ->
         {:ok, TetoIA.mensagem(info)}
@@ -459,50 +496,87 @@ defmodule Trafego.Agente do
     end
   end
 
-  defp concluir_plano(tenant, plano, texto \\ nil) do
-    case Plano.pendencias(plano) do
-      [] ->
-        plano = Plano.salvar(tenant, Map.put(plano, "status", "aguardando_confirmacao"))
-        Evento.emitir(tenant, "plano", plano["id"], "planejador", "aguardando_confirmacao")
-        atencao = if plano["atencao"] == [], do: "", else: " Atencao: em situacao parecida a verificacao acusou #{Enum.join(plano["atencao"], ", ")}; vou conferir isso de novo."
-        {:ok, Plano.resumo(plano) <> atencao <> " Vou criar tudo PAUSADO, nada sera ativado. Voce confirma?"}
+  # Ficha (etapa 5.2): com o nucleo (objetivo, imovel, verba diaria, teto) o plano sai; faltando algo, UMA mensagem com tudo
+  # numerado. `antes`: plano que estava aguardando confirmacao (ajuste: reenvia so as mensagens que mudaram).
+  defp concluir_plano(tenant, plano, texto \\ nil, opts \\ []) do
+    extras = opts[:extras] || %{}
 
-      pend ->
-        plano = Plano.salvar(tenant, Map.put(plano, "status", "rascunho"))
-        Evento.emitir(tenant, "plano", plano["id"], "planejador", "pendencias", %{"faltam" => pend})
-        # uma pergunta por vez: so a primeira pendencia vai pro corretor (a lista toda fica no evento)
-        resto = if tl(pend) == [], do: "", else: " O resto a gente ve depois, uma coisa de cada vez."
-        faltando = hd(pend)
-        ultima = Iara.perfil(tenant)["ultima_pendencia"]
-        mesma = is_map(ultima) and ultima["plano_id"] == plano["id"]
-        repetida = mesma and ultima["faltando"] == faltando
-        Iara.atualizar(tenant, %{"ultima_pendencia" => %{"plano_id" => plano["id"], "faltando" => faltando}})
+    case Ficha.avaliar(tenant, plano) do
+      {:pronto, completo} ->
+        if extras[:ambiguidade], do: perguntar(tenant, plano, [], texto, extras), else: pronto(tenant, completo, opts[:antes])
 
-        # o corretor perguntou (ou mudou de assunto) em vez de responder: a fala leva a pergunta dele e o que ja foi pedido,
-        # e o texto fixo nao repete a frase anterior
-        base =
-          if repetida,
-            do: "Ainda preciso de #{Plano.rotulo(faltando)} pra fechar o plano.#{resto}",
-            else: "Pra fechar o plano preciso de #{Plano.rotulo(faltando)}.#{resto}"
-
-        contexto = %{
-          "respondendo_pergunta" => is_binary(texto) and String.contains?(texto, "?"),
-          "ultima_pergunta_feita" => if(mesma, do: Plano.rotulo(ultima["faltando"])),
-          "ja_temos" => Map.drop(plano, ~w(id status atencao resultado url_final))
-        }
-
-        {:ok, base,
-         situacao: :falta, vazio: Plano.vazio?(plano), plano_id: plano["id"], contexto: contexto,
-         dados: %{"faltando" => faltando, "faltam_depois" => tl(pend)}}
+      {:pergunta, plano, itens} ->
+        perguntar(tenant, plano, itens, texto, extras)
     end
   end
+
+  defp pronto(tenant, plano, antes) do
+    plano = Plano.salvar(tenant, Map.put(plano, "status", "aguardando_confirmacao"))
+    Evento.emitir(tenant, "plano", plano["id"], "planejador", "aguardando_confirmacao")
+
+    atencao =
+      if plano["atencao"] == [], do: "", else: " Atencao: em situacao parecida a verificacao acusou #{Enum.join(plano["atencao"], ", ")}; vou conferir isso de novo."
+
+    case antes && Ficha.diferencas(antes, plano) do
+      nil -> {:ok, List.update_at(Ficha.mensagens(plano), -1, &(&1 <> atencao)), situacao: :plano, plano_id: plano["id"]}
+      [] -> {:ok, "Nao vi nada diferente no plano #{plano["id"]}. O que voce quer mudar?"}
+      diferentes -> {:ok, diferentes, situacao: :plano, plano_id: plano["id"]}
+    end
+  end
+
+  defp perguntar(tenant, plano, itens, texto, extras) do
+    plano = if "teto_total" in itens, do: Ficha.perguntar(plano, ["teto_total"]), else: plano
+    plano = Plano.salvar(tenant, Map.put(plano, "status", "rascunho"))
+    Evento.emitir(tenant, "plano", plano["id"], "planejador", "pendencias", %{"faltam" => itens})
+    ultima = Iara.perfil(tenant)["ultima_pendencia"]
+    mesma = is_map(ultima) and ultima["plano_id"] == plano["id"]
+    repetida = mesma and ultima["faltando"] == itens
+    Iara.atualizar(tenant, %{"ultima_pendencia" => %{"plano_id" => plano["id"], "faltando" => itens}})
+
+    duvida = if extras[:ambiguidade], do: "Fiquei na duvida: #{extras[:ambiguidade]}. Me confirma? ", else: ""
+    base = if itens == [], do: String.trim(duvida), else: duvida <> Ficha.perguntas(itens, repetida)
+    perguntou = is_binary(texto) and String.contains?(texto, "?")
+
+    contexto = %{
+      "respondendo_pergunta" => perguntou,
+      "ultima_pergunta_feita" => if(mesma, do: inspect(ultima["faltando"])),
+      "ja_temos" => Map.drop(plano, ~w(id status atencao resultado url_final ficha))
+    }
+
+    # texto fixo (a lista numerada nao depende da IA); so passa pela fala se o corretor fez uma pergunta
+    {:ok, base,
+     situacao: :falta, vazio: Plano.vazio?(plano), plano_id: plano["id"], contexto: contexto, fixo: not perguntou, numeradas: length(itens),
+     dados: %{"faltando" => itens}}
+  end
+
+  # plano aceito, falta so o arquivo: nada foi executado ainda
+  defp esperar_criativo(tenant, plano, texto) do
+    case IA.chamar(tenant, :pequena, :confirmar, %{"texto" => texto, "plano" => plano["id"], "resumo" => "o corretor ainda vai mandar a foto ou o video do anuncio; 'nao' cancela o plano"}) do
+      {:ok, %{"decisao" => "nao"}, uso} ->
+        Evento.custo(tenant, plano["id"], "planejador", "confirmar", uso)
+        decidir(tenant, plano, "nao")
+
+      {:ok, _, uso} ->
+        Evento.custo(tenant, plano["id"], "planejador", "confirmar", uso)
+        {:ok, lembrete_criativo(plano)}
+
+      {:error, {:teto_ia, info}} ->
+        {:ok, TetoIA.mensagem(info)}
+
+      {:error, _} ->
+        {:ok, lembrete_criativo(plano)}
+    end
+  end
+
+  defp lembrete_criativo(plano), do: "Ainda aguardo a foto (png ou jpg) ou o video (mp4) do anuncio do plano #{plano["id"]}; nada foi criado. Manda por aqui, ou diz que cancela."
 
   # ---- confirmacao em texto livre
   defp confirmar(tenant, plano, texto) do
     case IA.chamar(tenant, :pequena, :confirmar, %{"texto" => texto, "plano" => plano["id"]}) do
       {:ok, %{"decisao" => d}, uso} ->
         Evento.custo(tenant, plano["id"], "planejador", "confirmar", uso)
-        decidir(tenant, plano, d)
+        # pedido de mudanca em linguagem natural: ajusta so o que ele disse e reenvia so as mensagens afetadas
+        if d == "ajuste", do: planejar(tenant, plano, texto, "ajuste"), else: decidir(tenant, plano, d)
 
       {:error, {:teto_ia, info}} ->
         {:ok, TetoIA.mensagem(info)}
@@ -514,6 +588,29 @@ defmodule Trafego.Agente do
 
   defp decidir(tenant, plano, "sim") do
     Evento.emitir(tenant, "confirmacao", plano["id"], "planejador", "sim")
+
+    if get_in(plano, ["criativo", "midia"]) in [nil, ""] do
+      Plano.salvar(tenant, Map.put(plano, "status", "aguardando_criativo"))
+      Evento.emitir(tenant, "plano", plano["id"], "planejador", "aguardando_criativo")
+      {:ok, "Fechado! Falta so a foto ou o video do anuncio: me manda por aqui (imagem png ou jpg, ou video mp4). Quando chegar eu crio tudo PAUSADO; nada vai ao ar."}
+    else
+      executar_plano(tenant, plano)
+    end
+  end
+
+  defp decidir(tenant, plano, "nao") do
+    Evento.emitir(tenant, "confirmacao", plano["id"], "planejador", "nao")
+    Plano.salvar(tenant, Map.put(plano, "status", "recusado"))
+    Plano.definir_atual(tenant, nil)
+    {:ok, "Ok, cancelei o plano #{plano["id"]}; nada foi alterado."}
+  end
+
+  defp decidir(tenant, plano, _) do
+    Evento.emitir(tenant, "confirmacao", plano["id"], "planejador", "ambigua")
+    {:ok, @repergunta}
+  end
+
+  defp executar_plano(tenant, plano) do
     Plano.salvar(tenant, Map.put(plano, "status", "confirmado"))
 
     case Executor.executar(tenant, plano["id"]) do
@@ -535,17 +632,5 @@ defmodule Trafego.Agente do
         Plano.definir_atual(tenant, nil)
         {:ok, "Nao consegui criar a campanha (#{Executor.motivo(e)}). Nada ficou ativo; registrei o erro para a proxima proposta."}
     end
-  end
-
-  defp decidir(tenant, plano, "nao") do
-    Evento.emitir(tenant, "confirmacao", plano["id"], "planejador", "nao")
-    Plano.salvar(tenant, Map.put(plano, "status", "recusado"))
-    Plano.definir_atual(tenant, nil)
-    {:ok, "Ok, cancelei o plano #{plano["id"]}; nada foi alterado."}
-  end
-
-  defp decidir(tenant, plano, _) do
-    Evento.emitir(tenant, "confirmacao", plano["id"], "planejador", "ambigua")
-    {:ok, @repergunta}
   end
 end

@@ -120,7 +120,7 @@ defmodule Etapa51Test do
   # ------------------------------------------------------------------------------------------------------------------
   test "persona: o texto de persona traz identidade, escopo, estilo e limites" do
     p = Iara.persona()
-    for trecho <- ["Iara", "Ataque Total", "Cury Construtora", "uma IA", "aprende", "recusa", "UMA pergunta", "propoe", "WhatsApp", "2 a 3 linhas"],
+    for trecho <- ["Iara", "Ataque Total", "Cury Construtora", "uma IA", "aprende", "recusa", "lista numerada", "propoe", "WhatsApp", "2 a 3 linhas"],
         do: assert(p =~ trecho, "persona sem: #{trecho}")
 
     assert Iara.apresentacao() =~ "Iara" and Iara.apresentacao() =~ "Ataque Total" and Iara.apresentacao() =~ "IA"
@@ -130,11 +130,10 @@ defmodule Etapa51Test do
 
   test "TODA resposta ao corretor passa pela fala da Iara (texto, ativar, pausar, confirmar, erro) e carrega os fatos do texto-base" do
     t = tenant_pronto()
+    # o plano sai em mensagens curtas de texto fixo (etapa 5.2); o prefixo "Iara: " vem do laco, nao da fala
     r = dizer(t, @pedido)
-    assert r =~ "Iara: " and r =~ "Voce confirma?" and r =~ "R$ 50,00"
-    assert_received {:ia, :falar, e}
-    assert e["base"] =~ "R$ 50,00" and e["base"] =~ "Voce confirma?"
-    assert e["mensagem_do_corretor"] =~ "pedido destino site" and e["origem"] == "texto"
+    assert r =~ "Voce confirma?" and r =~ "R$ 50,00"
+    refute_received {:ia, :falar, _}
 
     for texto <- ["pode fazer sim", "ativa a campanha", "sim, pode ativar", "pausa a campanha", "sim, pode pausar", "ativa a campanha", "nao, deixa"] do
       r = dizer(t, texto)
@@ -174,6 +173,7 @@ defmodule Etapa51Test do
   test "custo da fala entra no custo_tokens em R$ e no teto; teto bloqueado nao chama a IA de fala e mantem a mensagem do teto" do
     t = tenant_pronto()
     dizer(t, @pedido)
+    dizer(t, "pode fazer sim")
     assert [%{dados: d} | _] = refs(t, "falar")
     assert d["custo_brl"] > 0 and d["papel"] == "planejador" or d["custo_brl"] > 0
     assert_in_delta TetoIA.gasto(t), Enum.sum(for e <- custos(t), do: e.dados["custo_brl"]), 1.0e-6
@@ -194,23 +194,17 @@ defmodule Etapa51Test do
     assert Iara.horario(t) == "09:00"
   end
 
-  test "uma pergunta por vez: pergunta so a primeira pendencia, aproveita o que ja foi dito e guarda as demais" do
+  test "ficha: pergunta tudo junto e numerado, nao repete o que ja foi dito e sugere o teto" do
     t = tenant_pronto()
     r = dizer(t, "pedido destino site; url https://corretor.com.br/lancamento; pixel 998877; publico casais 30-45")
-    assert r =~ "criativo"
-    for outro <- ~w(orcamento teto janela meta), do: refute(r =~ outro, "perguntou junto: #{outro}")
-    assert_received {:ia, :falar, e}
-    assert "orcamento_diario" in e["dados"]["faltam_depois"] and "meta" in e["dados"]["faltam_depois"]
-    refute "criativo" in e["dados"]["faltam_depois"]
-    assert Registro.eventos(t) |> Enum.any?(&(&1.dados["ref"] == "pendencias" and "orcamento_diario" in &1.dados["faltam"] and "criativo" in &1.dados["faltam"]))
+    assert r =~ "1. " and r =~ "2. " and r =~ "por dia" and r =~ "teto"
+    for outro <- ~w(criativo janela meta), do: refute(r =~ outro, "perguntou: #{outro}")
+    assert Registro.eventos(t) |> Enum.any?(&(&1.dados["ref"] == "pendencias" and &1.dados["faltam"] == ["orcamento_diario", "teto_total"]))
 
-    # o que ele ja disse nao e perguntado de novo; vai uma por vez ate fechar
-    r = dizer(t, "criativo foto1.jpg | Apartamento novo")
-    assert r =~ "orcamento" and not (r =~ "criativo")
+    # o que ele ja disse nao e perguntado de novo; teto perguntado e nao respondido vira sugestao (diario x dias da janela)
     r = dizer(t, "diario R$ 50")
-    assert r =~ "teto"
-    assert dizer(t, "teto R$ 500; janela #{Date.utc_today()} #{Date.add(Date.utc_today(), 30)}") =~ "meta"
-    assert dizer(t, "meta 20; custo_max R$ 15") =~ "Voce confirma?"
+    assert r =~ "Montei o plano" and r =~ "Teto total: R$ 1500,00 (sugestao minha)"
+    assert r =~ "Voce confirma?"
     # valores invalidos mantem o codigo no texto (significado do erro)
     u = tenant_pronto()
     assert dizer(u, String.replace(@pedido, "teto R$ 500", "teto R$ 999999999")) =~ "teto_acima_do_maximo"

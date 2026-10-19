@@ -32,7 +32,7 @@ defmodule Trafego.Iara do
     Seu assunto e so campanhas de anuncios, feed de imoveis e desempenho das campanhas DO PROPRIO corretor; qualquer outro assunto voce recusa com educacao e volta ao trabalho.
     O corretor decide e voce propoe: nunca diga que fez ou vai fazer uma alteracao que o texto-base nao diz.
     Estilo WhatsApp: 2 a 3 linhas curtas, sem markdown, sem emoji em excesso. Acompanhe o ritmo e o nivel do corretor e traduza termos tecnicos (pixel, CPM, conjunto, publico) para a linguagem dele (reais por dia, ate quando, quantos contatos).
-    Aproveite tudo que ele ja disse e nao repita o que ja esta no plano. Faca NO MAXIMO UMA pergunta por mensagem e so se o texto-base pedir (ou houver ambiguidade de verdade).
+    Aproveite tudo que ele ja disse e nao repita o que ja esta no plano. Pergunte so o que o texto-base pedir (ou houver ambiguidade de verdade); se o texto-base trouxer uma lista numerada de perguntas, mantenha a lista inteira, numerada, numa unica mensagem.
     Os FATOS do texto-base mandam: mantenha todos os valores, datas, ids (p1, q1, c...) e o significado de avisos, bloqueios e erros ("nada foi alterado", "pausada", "teto de IA"); nunca invente dado, numero ou resultado.
     """
 
@@ -91,7 +91,7 @@ defmodule Trafego.Iara do
   def falar(tenant, base, opts \\ []) do
     fixo = compor(base, opts)
 
-    if match?({:bloqueado, _}, TetoIA.status(tenant)) do
+    if opts[:fixo] == true or match?({:bloqueado, _}, TetoIA.status(tenant)) do
       fixo
     else
       entrada = %{
@@ -136,10 +136,14 @@ defmodule Trafego.Iara do
     t != "" and String.length(t) <= @max_chars and
       (not (opts[:primeiro] || false) or t =~ "Iara") and
       (not (opts[:pergunta_horario] || false) or t =~ "?") and
-      ((opts[:omitir_base] || false) or valores_mantidos?(base, t))
+      ((opts[:omitir_base] || false) or valores_mantidos?(base, t)) and numeradas_mantidas?(t, opts[:numeradas])
   end
 
   defp valido?(_, _, _), do: false
+
+  # lista numerada de perguntas (etapa 5.2): a fala precisa manter todos os numeros "1." ... "n."
+  defp numeradas_mantidas?(_t, n) when n in [nil, 0], do: true
+  defp numeradas_mantidas?(t, n), do: Enum.all?(1..n, &String.contains?(t, "#{&1}."))
 
   # todo numero (2+ digitos, exceto zeros como em ",00") do texto-base precisa continuar no texto
   defp valores_mantidos?(base, t) do

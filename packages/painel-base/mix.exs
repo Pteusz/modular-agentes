@@ -1,6 +1,6 @@
 defmodule PPainelBase.MixProject do
   use Mix.Project
-  @version "1.2.0"
+  @version "1.3.0"
 
   # Dev local (NUCLEO_LOCAL=1, posto pelo mix.exs da raiz): path. No cliente: git + sparse + tag, sem override.
   defp nucleo do

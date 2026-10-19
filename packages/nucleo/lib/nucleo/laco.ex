@@ -2,11 +2,19 @@ defmodule Nucleo.Laco do
   @moduledoc """
   Laco (esqueleto), um processo por tenant: mensagem entra -> le estado -> gancho -> grava estado -> responde pelo canal.
   Resposta prefixada; envio limitado por `teto_por_min` (config do tenant, padrao 10).
+
+  Prefixo: padrao "[agente] "; a automacao pode ter o seu (callback opcional `prefixo/0`, ex.: "Iara: ") e ele vale para respostas
+  e avisos. `conversar/2` pode devolver `{:ok, [textos]}`: cada mensagem sai separada, em ordem, com prefixo, dentro do teto_por_min
+  (o que nao couber no orcamento restante vai junto na ultima mensagem; se nao resta nada, e um unico `envio_limitado`).
+  Pausa entre mensagens: config do tenant `pausa_envio_ms` (padrao 0).
   """
   use GenServer
   alias Nucleo.{Registro, Gancho}
 
   @prefixo "[agente] "
+
+  @doc false
+  def prefixo_padrao, do: @prefixo
 
   def iniciar(tenant, opts \\ []),
     do:
@@ -34,7 +42,15 @@ defmodule Nucleo.Laco do
     Nucleo.Inicializacao.validar(tenant)
     mod = opts[:canal] || canal_vinculado(tenant)
     {:ok, ref} = mod.iniciar(tenant, self(), opts[:canal_opts] || [])
-    {:ok, %{tenant: tenant, mod: mod, ref: ref, auto: automacao(tenant), conv: conversa(tenant)}}
+    auto = automacao(tenant)
+    conv = conversa(tenant)
+    {:ok, %{tenant: tenant, mod: mod, ref: ref, auto: auto, conv: conv, prefixo: prefixo(conv, auto)}}
+  end
+
+  defp prefixo(conv, auto) do
+    Enum.find_value([conv, auto], @prefixo, fn m ->
+      is_atom(m) and m != nil and m != :inativo and Code.ensure_loaded?(m) and function_exported?(m, :prefixo, 0) && m.prefixo()
+    end)
   end
 
   # automacao ATIVA que conversa em texto livre (conversar/2) e/ou trata midia (midia/2), sem ser um Passo.
@@ -128,6 +144,7 @@ defmodule Nucleo.Laco do
   defp conversar(s, f) do
     case f.() do
       {:ok, resposta} when is_binary(resposta) -> responder(s, resposta)
+      {:ok, [_ | _] = respostas} -> responder_lista(s, respostas)
       {:error, e} -> Registro.evento(s.tenant, "conversa_falhou", %{"erro" => inspect(e)})
       _ -> :ok
     end
@@ -143,13 +160,40 @@ defmodule Nucleo.Laco do
 
     with :ok <- Gancho.intercepta(s.tenant, {:enviar, texto}),
          {:limite, false} <- {:limite, Registro.eventos_recentes(s.tenant, "enviado", 60) >= teto} do
-      case s.mod.enviar_texto(s.ref, @prefixo <> texto) do
-        :ok -> Registro.evento(s.tenant, "enviado")
-        {:error, e} -> Registro.evento(s.tenant, "envio_falhou", %{"erro" => inspect(e)})
-      end
+      enviar(s, texto)
     else
       {:limite, true} -> Registro.evento(s.tenant, "envio_limitado")
       {:bloquear, m} -> Registro.evento(s.tenant, "envio_bloqueado", %{"motivo" => m})
+    end
+  end
+
+  defp enviar(s, texto) do
+    case s.mod.enviar_texto(s.ref, s.prefixo <> texto) do
+      :ok -> Registro.evento(s.tenant, "enviado")
+      {:error, e} -> Registro.evento(s.tenant, "envio_falhou", %{"erro" => inspect(e)})
+    end
+  end
+
+  # varias mensagens em ordem; cada uma com prefixo; respeita o teto_por_min restante
+  defp responder_lista(s, textos) do
+    cfg = Registro.config(s.tenant)
+    teto = cfg["teto_por_min"] || 10
+    restante = teto - Registro.eventos_recentes(s.tenant, "enviado", 60)
+    pausa = cfg["pausa_envio_ms"] || 0
+
+    cond do
+      restante <= 0 ->
+        Registro.evento(s.tenant, "envio_limitado")
+
+      length(textos) <= restante ->
+        textos |> Enum.with_index() |> Enum.each(fn {t, i} -> if i > 0 and pausa > 0, do: Process.sleep(pausa); responder(s, t) end)
+
+      true ->
+        {cabem, resto} = Enum.split(textos, restante - 1)
+        Enum.each(cabem, &responder(s, &1))
+        responder(s, Enum.join(resto, "
+
+"))
     end
   end
 end

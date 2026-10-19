@@ -21,18 +21,15 @@ Data: 2026-10-19. Base: decisoes do Mateus nesta conversa. Nada implementado ain
 ### Primeiro contato
 Na primeira conversa com o corretor a Iara: (a) se apresenta (nome, equipe, e que e uma IA); (b) explica que se adapta ao jeito dele e aprende com o tempo, melhorando a cada campanha; (c) pergunta o MELHOR HORARIO para atualiza-lo sobre o andamento das campanhas (guardado por corretor; padrao 9h se ele nao responder; ele pode MUDAR o horario depois, mas NAO pode desligar as atualizacoes: decisao do Mateus).
 
-## 3. Criar campanha: o que a Iara pede e o que ela propoe
-O corretor so precisa dar 4 coisas; a Iara monta e propoe o resto.
-1. Imovel (do feed, ou texto livre).
-2. Criativo (foto ou video no chat; verificador decidivel confere formato/proporcao/resolucao).
-3. Orcamento (por dia e total).
-4. Quando (inicio e fim).
-A Iara PROPOE, com base no imovel e no que aprendeu:
-- Destino: WhatsApp direto (padrao); site ou formulario so se o corretor pedir.
-- Publico: sugerido por regiao e perfil do imovel; o corretor valida ou ajusta.
-- Texto do anuncio (copy): escrito pela Iara a partir do imovel; o corretor aprova ou ajusta.
-- Meta: resultados desejados e custo maximo por resultado; a Iara propoe, o corretor ajusta.
-Ela pode mudar algo no plano se achar mais coerente, explicando o motivo e pedindo confirmacao; se o corretor ajusta algo, ela refaz o plano em cima do ajuste.
+## 3. Criar campanha: o que a Iara pede e o que ela propoe (v2, adaptativo)
+Principio: propor primeiro, perguntar o minimo. Nada de uma pergunta por vez.
+1. Ficha interna da conversa (estado guardado em codigo, nao so na IA): objetivo, imovel, verba diaria, teto total, janela, destino, publico, criativo, meta. Cada mensagem do corretor (texto ou audio) preenche quantos campos puder; campo ja preenchido NUNCA e perguntado de novo.
+2. Se o corretor ja trouxe o essencial, a Iara nao pergunta e monta o plano. Se faltar algo do nucleo (objetivo, imovel, verba diaria, teto), faz UMA mensagem curta com todas as perguntas que faltam, numeradas. Teto: se o corretor nao tiver, ela SUGERE um (diario x dias da janela) e segue.
+3. Ela completa o resto com padroes sensatos, marcados como sugestao dela: destino WhatsApp, publico por regiao/perfil do imovel, copy (regras HOUSING), meta de custo por resultado, janela padrao. Criativo (foto/video) pedido so depois do plano aceito, se ainda nao houver.
+4. Entrega do plano em 4 a 5 mensagens curtas, uma ideia cada (resumo imovel/objetivo/verba; publico e destino; texto do anuncio; meta e teto; fechamento pedindo validacao). Nunca um bloco grande. Somente texto natural, sem botoes.
+5. Ajuste em linguagem natural: o corretor muda um ponto, a Iara atualiza so aquele campo e reenvia so a mensagem afetada. Se algo ficou ambiguo, ela diz o que e pede confirmacao.
+6. Proibido: "uma coisa de cada vez", "o resto a gente ve depois", repetir pergunta ja respondida.
+Ela pode mudar algo no plano se achar mais coerente, explicando o motivo e pedindo confirmacao.
 Regras do anuncio (imovel = categoria HOUSING): sem promessa de rentabilidade, "garantido" ou discriminacao; a Iara reescreve antes de propor.
 
 ### Validacao do plano (novo)
@@ -48,5 +45,7 @@ Antes de pedir confirmacao, a Iara VALIDA o plano e mostra o resultado: (a) exig
 - Agente adicional de planejamento e otimizacao, que usa o que foi aprendido (previsto pelo Mateus para as proximas atualizacoes). Hoje continua um unico agente (A3); o encaixe e o aprendizado por tenant (A7).
 
 ## 6. Decidido e em aberto
+- DECIDIDO (v2): as mensagens saem com o nome dela ("Iara: ...") no lugar do prefixo "[agente] " (WhatsApp e painel); o prefixo vira configuravel por agente, eco continua com o dele.
+- DECIDIDO (v2): Iara sugere teto quando o corretor nao tem; apenas texto, sem botoes.
 - DECIDIDO: o corretor nao pode desligar as atualizacoes (so escolher/mudar o horario).
 1. Nome do imovel no plano quando ha varios parecidos no feed (chave e o id; a Iara mostra bairro e dormitorios para o corretor escolher).
