@@ -5,7 +5,7 @@ defmodule Etapa521Test do
   use ExUnit.Case
   alias Nucleo.{Registro, Vincular, Canal}
   alias Nucleo.Automacoes.Trafego, as: Contrato
-  alias Trafego.{Agente, Acesso, Plano, Ficha, Iara, Banco}
+  alias Trafego.{Agente, Acesso, Plano, Ficha, Banco}
   alias Trafego.Plataforma.Simulada
 
   @base "pedido objetivo vender; imovel Torre Sul; destino whatsapp; pixel 998877; publico casais zona sul; diario R$ 50; teto R$ 500; " <>
@@ -59,11 +59,10 @@ defmodule Etapa521Test do
   defp tenant_pronto, do: (t = "tp521_#{System.unique_integer([:positive])}"; {t, vincular(t)})
   defp msgs({:ok, r}), do: List.wrap(r)
   defp bruto(t, texto), do: msgs(Agente.processar_mensagens(t, texto))
-  defp sem_abertura(l), do: Enum.reject(l, &(&1 in [Iara.pergunta_horario() | Iara.apresentacao_mensagens()]))
-  defp dizer(t, texto), do: t |> bruto(texto) |> sem_abertura()
+  defp dizer(t, texto), do: t |> bruto(texto)
   defp junto(l), do: Enum.join(l, "\n")
   defp png(w, h), do: <<137, 80, 78, 71, 13, 10, 26, 10, 13::32, "IHDR", w::32, h::32, 8, 2, 0, 0, 0, 0::32>> <> :binary.copy(<<0>>, 3000)
-  defp foto(t), do: t |> Agente.receber_midia_mensagens(midia(png(1080, 1080))) |> msgs() |> sem_abertura()
+  defp foto(t), do: t |> Agente.receber_midia_mensagens(midia(png(1080, 1080))) |> msgs()
 
   defp midia(conteudo) do
     media = struct(Amarula.Content.Media, kind: :image, mimetype: "image/png", url: conteudo)
@@ -171,18 +170,18 @@ defmodule Etapa521Test do
     assert fim =~ "pausada"
   end
 
-  test "primeira mensagem: apresentacao em 2 mensagens curtas e o horario separado, nenhuma longa" do
+  test "primeira mensagem com pedido: so o plano (sem apresentacao colada, sem pergunta de horario) e nenhuma fala longa" do
     {t, _} = tenant_pronto()
     l = bruto(t, "pedido objetivo vender; imovel Torre Sul")
-    assert Enum.take(l, 2) == Iara.apresentacao_mensagens()
-    assert length(l) == 3
+    assert length(l) == 1
+    refute junto(l) =~ ~r/eu sou a iara|melhor horario/i
     assert curtas(l) == [], "falas longas: #{inspect(curtas(l))}"
 
-    # plano completo ja no primeiro contato: apresentacao (2) e so depois o plano
+    # plano completo ja no primeiro contato: direto o plano
     {t2, _} = tenant_pronto()
     l = bruto(t2, @base <> "; sem_numero sim")
-    assert Enum.take(l, 2) == Iara.apresentacao_mensagens()
-    assert Enum.at(l, 2) =~ "Montei o plano"
+    assert hd(l) =~ "Montei o plano"
+    refute junto(l) =~ ~r/eu sou a iara|melhor horario/i
     assert curtas(l) == [], "falas longas: #{inspect(curtas(l))}"
   end
 

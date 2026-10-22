@@ -126,9 +126,10 @@ defmodule Etapa51Test do
     for trecho <- ["Iara", "Ataque Total", "Cury Construtora", "uma IA", "aprende", "recusa", "lista numerada", "propoe", "WhatsApp", "2 a 3 linhas"],
         do: assert(p =~ trecho, "persona sem: #{trecho}")
 
-    assert Iara.apresentacao() =~ "Iara" and Iara.apresentacao() =~ "Ataque Total" and Iara.apresentacao() =~ "IA"
-    assert Iara.apresentacao() =~ "aprendo com o tempo" and Iara.apresentacao() =~ ~r/me adapto/i
-    assert Iara.pergunta_horario() =~ "horario" and Iara.pergunta_horario() =~ "?" and Iara.pergunta_horario() =~ "9h"
+    # 1.11.0: sem texto de apresentacao pronto; so a mensagem unica do fallback (modelo fora do ar no primeiro contato)
+    m = Iara.apresentacao_minima()
+    assert m =~ "Iara" and m =~ "Ataque Total" and m =~ "Cury Construtora" and m =~ "IA"
+    refute m =~ "?"
   end
 
   test "TODA resposta ao corretor passa pela fala da Iara (texto, ativar, pausar, confirmar, erro) e carrega os fatos do texto-base" do
@@ -158,11 +159,12 @@ defmodule Etapa51Test do
 
   test "fala fora do contrato (erro, vazia, sem os valores do texto-base) cai no texto fixo com o mesmo significado" do
     t = tenant_pronto()
-    # primeira volta sem fala: apresentacao + base fixos
+    # primeira volta sem fala: base fixa
     Process.put(:espia, :erro)
     r = dizer(t, @pedido)
     refute r =~ "[Iara] "
-    assert r =~ "Eu sou a Iara" and r =~ "Voce confirma?" and r =~ "R$ 50,00" and r =~ "PAUSADO"
+    refute r =~ "Eu sou a Iara"
+    assert r =~ "Voce confirma?" and r =~ "R$ 50,00" and r =~ "PAUSADO"
 
     Process.put(:espia, :vazio)
     # 5.3: "ativa" vai para a conversa; sem campanha nada e proposto (a fala vazia so vale para as mensagens que ainda a usam)
@@ -218,19 +220,17 @@ defmodule Etapa51Test do
     assert dizer(u, String.replace(@pedido, "teto R$ 500", "teto R$ 999999999")) =~ "passou do maximo"
   end
 
-  test "primeiro contato: se apresenta uma vez so, por corretor, e pergunta o melhor horario sem pergunta duplicada" do
+  test "primeiro contato: \"oi\" = UMA mensagem curta de apresentacao (sem pergunta de horario junto) e nunca se apresenta de novo" do
     t = tenant_pronto()
     assert Iara.perfil(t)["apresentada"] == false
     r = dizer(t, "oi")
-    assert r =~ "Eu sou a Iara" and r =~ "Ataque Total" and r =~ "Cury Construtora" and r =~ "IA" and r =~ "aprendo com o tempo"
-    assert r =~ "melhor horario" and r =~ "9h" and r =~ "?"
-    refute r =~ ~r/falta/i, "nada de pergunta do plano junto da pergunta de horario"
-    assert %{"apresentada" => true, "horario_estado" => "perguntado"} = Iara.perfil(t)
+    assert r =~ "Eu sou a Iara" and r =~ "Ataque Total" and r =~ "Cury Construtora" and r =~ "IA"
+    refute r =~ "horario" or r =~ "?"
+    assert Iara.cobertura(t) == %{"quem_sou" => true, "como_aprendo" => false}
+    assert %{"apresentada" => true, "horario_estado" => "nao_perguntado"} = Iara.perfil(t)
 
-    # nunca mais se apresenta
-    dizer(t, "8h30")
-    r = dizer(t, "quero anunciar um lancamento")
-    refute r =~ "Eu sou a Iara"
+    # nunca mais repete o item que ja disse
+    refute dizer(t, "oi") =~ "Eu sou a Iara"
 
     # outro corretor tem o proprio primeiro contato
     u = tenant_pronto()
@@ -241,30 +241,36 @@ defmodule Etapa51Test do
     assert falar_audio(v, "oi") =~ "Eu sou a Iara"
   end
 
+  # tenant ja apresentado que acabou de ouvir a pergunta do horario
+  defp perguntado(t) do
+    for item <- ~w(quem_sou como_aprendo horario_perguntado), do: Iara.cobrir(t, item)
+    t
+  end
+
   test "horario: definido pelo corretor, padrao 9h se nao responder, muda depois, nunca desliga" do
     # definido
-    t = tenant_pronto()
-    dizer(t, "oi")
+    t = perguntado(tenant_pronto())
     r = dizer(t, "pode ser 8h30")
     assert r =~ "08:30" or r =~ "8h30"
     assert Iara.horario(t) == "08:30" and Iara.perfil(t)["horario_estado"] == "definido"
     assert Registro.ler(t, "iara_perfil")["horario"] == "08:30"
+    assert Iara.encerrada?(t), "horario combinado = apresentacao encerrada"
 
     # nao respondeu (mudou de assunto): padrao 09:00 e a mensagem segue o fluxo normal
-    u = tenant_pronto()
-    dizer(u, "oi")
+    u = perguntado(tenant_pronto())
     r = dizer(u, @pedido)
     assert r =~ "Voce confirma?"
     assert Iara.horario(u) == "09:00" and Iara.perfil(u)["horario_estado"] == "padrao"
 
-    # primeiro contato com pedido de plano: a pergunta de horario espera o plano sair do caminho (uma pergunta por vez)
+    # primeiro contato com pedido de plano: so o plano (a apresentacao espera o plano sair do caminho)
     v = tenant_pronto()
     r = dizer(v, @pedido)
-    assert r =~ "Eu sou a Iara" and r =~ "Voce confirma?"
-    refute r =~ "melhor horario"
+    assert r =~ "Voce confirma?"
+    refute r =~ ~r/eu sou a iara|melhor horario/i
     r = dizer(v, "pode fazer sim")
-    assert r =~ "pausada" and r =~ "melhor horario"
-    assert Iara.perfil(v)["horario_estado"] == "perguntado"
+    assert r =~ "pausada"
+    refute r =~ "melhor horario"
+    assert Iara.perfil(v)["horario_estado"] == "nao_perguntado"
     dizer(v, "ativa a campanha")
     assert Iara.horario(v) == "09:00"
 
@@ -409,17 +415,14 @@ defmodule Etapa51Test do
     assert_in_delta d["custo_brl"], 0.009, 1.0e-6
     assert_in_delta TetoIA.gasto(t), 0.009, 1.0e-6
 
-    assert {:ok, "08:30"} = Iara.ler_horario(t, "pode ser as 8h30")
-    assert_received {:openai, _, %{"text" => %{"format" => %{"name" => "horario", "strict" => true}}}}
     assert :ok = Iara.duvida_audio(t, "ativa a campanha")
     assert_received {:openai, _, %{"text" => %{"format" => %{"name" => "checar_transcricao", "strict" => true}}}}
 
-    # erro HTTP do provedor: fala vira texto fixo; horario nao entendido; transcricao sem duvida
+    # erro HTTP do provedor: fala vira texto fixo; transcricao sem duvida
     srv2 = HttpFalso.start(fn _ -> {500, %{}} end)
     on_exit(fn -> :gen_tcp.close(srv2.ls) end)
     Application.put_env(:trafego, :openai, base_url: HttpFalso.url(srv2), timeout: 2_000, modelos: %{pequena: "modelo-pequena-x", media: "modelo-media-x"})
     assert Iara.falar(t, "Plano p1: pronto. Voce confirma?") == "Plano p1: pronto. Voce confirma?"
-    assert {:ok, nil} = Iara.ler_horario(t, "8h")
     assert :ok = Iara.duvida_audio(t, "x")
     Application.put_env(:trafego, :provedor_ia, Trafego.IA.Falso)
   end

@@ -4,7 +4,9 @@ defmodule Trafego.Ferramentas do
   NENHUMA ferramenta recebe conta (a conta e sempre a do registro do tenant, via Trafego.Acesso), campanhas aparecem com ids curtos
   (c1, c2...) para o modelo nao inventar id, e nao existe ferramenta que ative, crie na Meta, edite verba ou desligue as atualizacoes.
 
-  LEITURA (nao altera nada): `campanhas`, `imoveis`, `saldo_e_teto`, `ficha`, `lembrar` (so preferencia de horario/voz da propria Iara).
+  LEITURA (nao altera nada): `campanhas`, `imoveis`, `saldo_e_teto`, `ficha`, `lembrar` (so preferencia de horario/voz da propria Iara),
+  `combinar_horario` (grava o horario da atualizacao diaria; nunca desliga) e `apresentacao` (registra o que a Iara REALMENTE disse da
+  apresentacao: so o registro, que o Conversa persiste depois de validar o texto; um item por mensagem).
   ACAO (no maximo UMA por mensagem): `planejar`, `pausar` (pre-autorizada, motivo obrigatorio), `propor_ativar` e `propor_criar`
   (so abrem a proposta/confirmacao: a execucao so acontece depois do "sim" do corretor, pelo caminho de sempre: Gancho, Executor, Ativacao).
 
@@ -27,8 +29,14 @@ defmodule Trafego.Ferramentas do
      [{"busca", :texto_nulo, "parte do nome, bairro ou regiao; nulo = primeiros do feed"}]},
     {"saldo_e_teto", "Verba diaria e teto das campanhas ativas, teto maximo por campanha e o teto de custo de IA do mes. NAO tem o saldo da conta da Meta.", []},
     {"ficha", "Consulta o plano em andamento: o que ja foi dito e o que ainda falta (so leitura).", []},
-    {"lembrar", "Guarda preferencia da Iara: horario da atualizacao diaria (HH:MM; a atualizacao nao pode ser desligada) ou resposta em texto/audio.",
+    {"lembrar", "Guarda preferencia da Iara: resposta em texto/audio (para o horario da atualizacao diaria use `combinar_horario`).",
      [{"chave", {:enum, ~w(horario_atualizacao preferencia_voz)}, "o que lembrar"}, {"valor", :texto, "horario (ex.: 07:00) ou texto | audio"}]},
+    {"combinar_horario",
+     "Grava o horario da atualizacao diaria das campanhas que o corretor escolheu, em HH:MM 24h (converta \"umas 8h\" -> 08:00, \"depois do almoco\" -> 14:00). Vago (\"mais tarde\"): pergunte antes. A atualizacao NAO pode ser desligada; so o horario muda.",
+     [{"hora", :texto, "horario em HH:MM, ex.: 08:00"}]},
+    {"apresentacao",
+     "Registra o que voce ACABOU de dizer na apresentacao, so depois de dizer na mensagem desta rodada e UM item por mensagem: quem_sou (nome, equipe, que e IA), como_aprendo (se adapta e aprende com o tempo) ou horario_perguntado (perguntou o melhor horario da atualizacao diaria).",
+     [{"item", {:enum, ~w(quem_sou como_aprendo horario_perguntado)}, "o item dito agora"}]},
     {"planejar",
      "Registra o pedido do corretor no plano (cria plano novo ou completa o rascunho). Se faltar dado o sistema monta as perguntas sozinho; se estiver completo, o sistema envia o resumo para ele confirmar. Nada e criado na Meta.",
      [{"pedido", :texto, "o que o corretor pediu/respondeu, nas palavras dele"}]},
@@ -65,7 +73,7 @@ defmodule Trafego.Ferramentas do
   defp tipo_schema({:enum, valores}), do: %{"type" => "string", "enum" => valores}
 
   @doc """
-  Executa uma ferramenta pelo nome. `ctx` (mapa da conversa) acumula `:efeitos` ([{:pausou, info} | {:planejou, id} | {:propos, id} | {:lembrou, chave}]),
+  Executa uma ferramenta pelo nome. `ctx` (mapa da conversa) acumula `:efeitos` ([{:pausou, info} | {:planejou, id} | {:propos, id} | {:lembrou, chave} | {:apresentou, item}]),
   `:entrega` (texto montado pelo codigo para o corretor, quando a ferramenta o produz) e `:leituras` (ultimo resultado por ferramenta).
   Devolve {:ok, resultado, ctx} | {:erro, resultado, ctx}; resultado e um mapa (vira JSON para o modelo).
   """
@@ -175,14 +183,41 @@ defmodule Trafego.Ferramentas do
     end
   end
 
-  defp faz("lembrar", tenant, %{"chave" => "horario_atualizacao", "valor" => v}, ctx) do
+  defp faz("lembrar", tenant, %{"chave" => "horario_atualizacao", "valor" => v}, ctx), do: faz("combinar_horario", tenant, %{"hora" => v}, ctx)
+
+  defp faz("combinar_horario", tenant, %{"hora" => v}, ctx) do
     case Iara.normalizar_horario(v) do
       nil ->
         {:erro, %{"erro" => "horario_invalido", "esperado" => "HH:MM, ex.: 07:00"}, ctx}
 
       hh ->
-        Iara.atualizar(tenant, %{"horario" => hh, "horario_estado" => "definido"})
+        Iara.definir_horario(tenant, hh)
         {:ok, %{"lembrado" => "horario_atualizacao", "horario" => hh, "obs" => "a atualizacao diaria continua ligada; so o horario mudou"}, efeito(ctx, {:lembrou, "horario_atualizacao"})}
+    end
+  end
+
+  defp faz("apresentacao", tenant, %{"item" => item}, ctx) do
+    cob = Iara.cobertura(tenant)
+    estado = Iara.perfil(tenant)["horario_estado"]
+
+    cond do
+      Enum.any?(ctx.efeitos, &match?({:apresentou, _}, &1)) ->
+        {:erro, %{"erro" => "um_item_por_mensagem", "obs" => "ja registrou um item de apresentacao nesta mensagem; o proximo fica para a proxima"}, ctx}
+
+      item == "quem_sou" and cob["quem_sou"] ->
+        {:erro, %{"erro" => "ja_apresentada", "obs" => "voce ja disse quem e; nao repita"}, ctx}
+
+      item == "como_aprendo" and (not cob["quem_sou"] or cob["como_aprendo"]) ->
+        {:erro, %{"erro" => "fora_de_ordem", "proximo" => Iara.proximo_item(tenant)}, ctx}
+
+      item == "horario_perguntado" and (not cob["como_aprendo"] or estado in ["definido", "padrao"]) ->
+        {:erro, %{"erro" => "fora_de_ordem", "proximo" => Iara.proximo_item(tenant)}, ctx}
+
+      item == "horario_perguntado" and Iara.perguntas_horario(tenant) >= Iara.max_perguntas_horario() ->
+        {:erro, %{"erro" => "ja_perguntou_o_horario", "obs" => "nao pergunte de novo: sem escolha o sistema usa #{Iara.horario_padrao()}; diga isso e siga"}, ctx}
+
+      true ->
+        {:ok, %{"registrado" => item, "obs" => "sera gravado quando sua mensagem for aceita; nesta mensagem nao fale de mais nada da apresentacao", "horario_padrao_se_nao_disser" => Iara.horario_padrao()}, efeito(ctx, {:apresentou, item})}
     end
   end
 

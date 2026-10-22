@@ -91,8 +91,7 @@ defmodule Etapa523Test do
 
   defp tenant_pronto(canal \\ Canal.Simulado), do: (t = "tp523_#{System.unique_integer([:positive])}"; vincular(t, canal); t)
   defp msgs({:ok, r}), do: List.wrap(r)
-  defp sem_abertura(l), do: Enum.reject(l, &(&1 in [Iara.pergunta_horario() | Iara.apresentacao_mensagens()]))
-  defp dizer(t, texto), do: t |> Agente.processar_mensagens(texto) |> msgs() |> sem_abertura()
+  defp dizer(t, texto), do: t |> Agente.processar_mensagens(texto) |> msgs()
   defp junto(l), do: Enum.join(l, "\n")
   defp esperar(f, n \\ 80), do: f.() || (n > 0 && (Process.sleep(50); esperar(f, n - 1)))
 
@@ -192,9 +191,7 @@ defmodule Etapa523Test do
 
   # ------------------------------------------------------------------------------------------------------------------
   # 3) audio
-  test "apresentacao e lista de perguntas dizem que da para mandar audio" do
-    assert junto(Iara.apresentacao_mensagens()) =~ ~r/audio/i
-    assert Iara.apresentacao() =~ ~r/audio/i
+  test "a lista de perguntas diz que da para mandar audio" do
     Application.put_env(:trafego, :numero_cadastrado, fn _ -> nil end)
     t = tenant_pronto()
     dizer(t, "quero anunciar")
@@ -374,9 +371,9 @@ defmodule Etapa523Test do
     System.delete_env("OPENAI_API_KEY")
   end
 
-  test "versoes: nucleo 1.5.0 (canal com enviar_audio opcional) e trafego 1.10.0" do
+  test "versoes: nucleo 1.5.0 (canal com enviar_audio opcional) e trafego 1.11.0" do
     assert to_string(Application.spec(:nucleo, :vsn)) == "1.5.0"
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.10.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.11.0"
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:optional_callbacks)
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:callbacks)
     Code.ensure_loaded!(Nucleo.Canal.Simulado)

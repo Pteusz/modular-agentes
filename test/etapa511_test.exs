@@ -149,6 +149,8 @@ defmodule Etapa511Test do
 
   test "excecao no texto tambem responde, sem eco do conteudo" do
     t = tenant_pronto()
+    # ja apresentada: no primeiro contato a falha vira a apresentacao minima (1.11.0), coberta em test/etapa55_test.exs
+    Trafego.Iara.atualizar(t, %{"apresentada" => true, "horario_estado" => "definido", "horario" => "09:00"})
     Application.put_env(:trafego, :provedor_ia, IaBomba)
     r = dizer(t, "segredo do corretor 12345")
     assert r =~ "nada foi alterado" and not (r =~ "segredo")

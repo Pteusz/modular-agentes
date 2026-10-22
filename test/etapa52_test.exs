@@ -57,8 +57,7 @@ defmodule Etapa52Test do
   defp tenant_pronto, do: (t = "tp52_#{System.unique_integer([:positive])}"; vincular(t); t)
   defp msgs({:ok, r}), do: List.wrap(r)
   # a apresentacao do primeiro contato (etapa 5.2.1) e testada na etapa521; aqui sai fora pra olhar o plano
-  defp dizer(t, texto), do: t |> Agente.processar_mensagens(texto) |> msgs() |> sem_abertura()
-  defp sem_abertura(l), do: Enum.reject(l, &(&1 in [Trafego.Iara.pergunta_horario() | Trafego.Iara.apresentacao_mensagens()]))
+  defp dizer(t, texto), do: t |> Agente.processar_mensagens(texto) |> msgs()
   defp junto(l), do: Enum.join(l, "\n")
   defp esperar(f, n \\ 60), do: f.() || (n > 0 && (Process.sleep(50); esperar(f, n - 1)))
   defp png(w, h), do: <<137, 80, 78, 71, 13, 10, 26, 10, 13::32, "IHDR", w::32, h::32, 8, 2, 0, 0, 0, 0::32>> <> :binary.copy(<<0>>, 3000)
@@ -146,7 +145,7 @@ defmodule Etapa52Test do
     assert Plano.listar(t) |> Enum.all?(&(&1["campanha_id"] in [nil, ""]))
 
     # chegou o criativo: executa, campanha PAUSADA
-    [fim] = t |> Agente.receber_midia_mensagens(midia(:image, png(1080, 1080))) |> msgs() |> sem_abertura()
+    [fim] = t |> Agente.receber_midia_mensagens(midia(:image, png(1080, 1080))) |> msgs()
     assert fim =~ "pausada"
     assert %{"campanha_id" => cid} = Plano.listar(t) |> List.last()
     assert Enum.find(Simulada.todas(), &(&1["id"] == cid))["status"] == "PAUSADA"
@@ -174,7 +173,7 @@ defmodule Etapa52Test do
 
   test "audio vale como texto: mesma ficha, mesmo resultado" do
     t = tenant_pronto()
-    l = t |> Agente.receber_midia_mensagens(midia(:audio, @completo, seconds: 6, file_length: 9000)) |> msgs() |> sem_abertura()
+    l = t |> Agente.receber_midia_mensagens(midia(:audio, @completo, seconds: 6, file_length: 9000)) |> msgs()
     assert hd(l) =~ "Montei o plano" and length(l) == 5
     assert %{"status" => "aguardando_confirmacao"} = Plano.atual(t)
   end

@@ -5,7 +5,7 @@ defmodule Etapa522Test do
   use ExUnit.Case
   alias Nucleo.{Registro, Vincular, Canal, Verificador}
   alias Nucleo.Automacoes.Trafego, as: Contrato
-  alias Trafego.{Agente, Acesso, Plano, Iara, Banco}
+  alias Trafego.{Agente, Acesso, Plano, Banco}
   alias Trafego.Plataforma.{Simulada, Meta}
 
   @base "pedido objetivo vender; imovel Torre Sul; destino whatsapp; pixel 998877; publico casais zona sul; diario R$ 50; teto R$ 500; " <>
@@ -57,10 +57,9 @@ defmodule Etapa522Test do
   defp tenant_pronto, do: (t = "tp522_#{System.unique_integer([:positive])}"; vincular(t); t)
   defp msgs({:ok, r}), do: List.wrap(r)
   defp bruto(t, texto), do: msgs(Agente.processar_mensagens(t, texto))
-  defp sem_abertura(l), do: Enum.reject(l, &(&1 in [Iara.pergunta_horario() | Iara.apresentacao_mensagens()]))
-  defp dizer(t, texto), do: t |> bruto(texto) |> sem_abertura()
+  defp dizer(t, texto), do: t |> bruto(texto)
   defp png(w, h), do: <<137, 80, 78, 71, 13, 10, 26, 10, 13::32, "IHDR", w::32, h::32, 8, 2, 0, 0, 0, 0::32>> <> :binary.copy(<<0>>, 3000)
-  defp foto(t), do: t |> Agente.receber_midia_mensagens(midia(png(1080, 1080))) |> msgs() |> sem_abertura()
+  defp foto(t), do: t |> Agente.receber_midia_mensagens(midia(png(1080, 1080))) |> msgs()
 
   defp midia(conteudo) do
     media = struct(Amarula.Content.Media, kind: :image, mimetype: "image/png", url: conteudo)
