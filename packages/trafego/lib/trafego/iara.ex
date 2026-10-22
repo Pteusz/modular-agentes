@@ -13,7 +13,8 @@ defmodule Trafego.Iara do
   politica + este estado, que sao DADOS: "apresentacao" => %{"quem_sou" => bool, "como_aprendo" => bool} (o que a Iara REALMENTE disse),
   "horario_estado", "horario_perguntas" (quantas vezes perguntou o horario). "apresentada" espelha quem_sou (compativel com o formato antigo:
   perfil antigo com apresentada=true e sem "apresentacao" vale como quem_sou e como_aprendo ja ditos). Um item por mensagem; horario
-  combinado ou assumido (padrao) = apresentacao encerrada. Unico texto fixo: `apresentacao_minima/0`, so se o modelo falhar no primeiro contato.
+  combinado ou assumido (padrao) = apresentacao encerrada; ao combinar, a Iara confirma o horario e pergunta se ele ja quer criar a primeira
+  campanha (trafego 1.12.1; "campanha_perguntada" marca que foi feita e nunca se repete). Unico texto fixo: `apresentacao_minima/0`, so se o modelo falhar no primeiro contato.
   """
   alias Nucleo.Registro
   alias Trafego.{Evento, IA, TetoIA}
@@ -90,6 +91,18 @@ defmodule Trafego.Iara do
     c = cobertura(tenant)
     c["quem_sou"] and c["como_aprendo"] and perfil(tenant)["horario_estado"] in ["definido", "padrao"]
   end
+
+  @doc """
+  A pergunta de primeira campanha (gancho do fechamento da apresentacao, trafego 1.12.1) ja foi feita? Campo "campanha_perguntada";
+  perfil que ja tinha horario combinado ou assumido (antes da 1.12.1) conta como feita, para a pergunta nunca ser repetida.
+  """
+  def campanha_perguntada?(tenant) do
+    p = perfil(tenant)
+    p["campanha_perguntada"] == true or p["horario_estado"] in ["definido", "padrao"]
+  end
+
+  @doc "Marca a pergunta de primeira campanha como feita (a apresentacao acabou; o proximo sim ja e conversa normal de campanha)."
+  def marcar_campanha_perguntada(tenant), do: atualizar(tenant, %{"campanha_perguntada" => true})
 
   @doc "Proximo item (UM so): \"quem_sou\" | \"como_aprendo\" | \"perguntar_horario\" | \"aguardar_horario\" | nil (encerrada)."
   def proximo_item(tenant) do
