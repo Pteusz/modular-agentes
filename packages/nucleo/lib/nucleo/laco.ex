@@ -11,6 +11,10 @@ defmodule Nucleo.Laco do
   Nota de voz (1.5.0): cada elemento da resposta pode ser `{:audio, bytes, opts, texto}` em vez de texto. Sai por `enviar_audio/3` do
   canal, SEM prefixo (voz nao tem prefixo textual), e conta no teto_por_min como qualquer mensagem; o gancho `{:enviar, texto}` ve o
   texto equivalente. Canal sem `enviar_audio` ou envio que falha = o mesmo `texto` sai como mensagem de texto, com prefixo (nunca silencia).
+
+  Juncao de mensagens rapidas (1.6.0): a automacao de conversa pode definir `junta_ms/0` (callback opcional; padrao 0 = desligado). Com
+  janela > 0, textos que chegam em sequencia (cada um dentro da janela do anterior) esperam e viram UM turno (unidos por quebra de linha),
+  em vez de um turno por mensagem. Chegou midia: o que esta esperando e processado antes dela (a ordem se mantem). So vale para `conversar/2`.
   """
   use GenServer
   alias Nucleo.{Registro, Gancho}
@@ -48,7 +52,26 @@ defmodule Nucleo.Laco do
     {:ok, ref} = mod.iniciar(tenant, self(), opts[:canal_opts] || [])
     auto = automacao(tenant)
     conv = conversa(tenant)
-    {:ok, %{tenant: tenant, mod: mod, ref: ref, auto: auto, conv: conv, prefixo: prefixo(conv, auto)}}
+    {:ok, %{tenant: tenant, mod: mod, ref: ref, auto: auto, conv: conv, prefixo: prefixo(conv, auto), buf: [], timer: nil}}
+  end
+
+  # janela (ms) para juntar mensagens em sequencia; 0 = cada mensagem e um turno
+  defp junta_ms(nil), do: 0
+
+  defp junta_ms(conv) do
+    if Code.ensure_loaded?(conv) and function_exported?(conv, :junta_ms, 0), do: max(conv.junta_ms(), 0), else: 0
+  end
+
+  # processa o que esta esperando na janela (um turno so)
+  defp esvaziar(%{buf: []} = s), do: s
+
+  defp esvaziar(%{buf: buf, conv: conv} = s) do
+    if s.timer, do: Process.cancel_timer(s.timer)
+    texto = buf |> Enum.reverse() |> Enum.join("
+")
+    s = %{s | buf: [], timer: nil}
+    conversar(s, fn -> conv.conversar(s.tenant, texto) end)
+    s
   end
 
   defp prefixo(conv, auto) do
@@ -102,6 +125,7 @@ defmodule Nucleo.Laco do
   def handle_info({:midia, _}, %{auto: :inativo} = s), do: {:noreply, s}
 
   def handle_info({:midia, msg}, %{conv: conv} = s) when conv != nil do
+    s = esvaziar(s)
     if function_exported?(conv, :midia, 2), do: conversar(s, fn -> conv.midia(s.tenant, msg) end)
     {:noreply, s}
   end
@@ -131,8 +155,15 @@ defmodule Nucleo.Laco do
   end
 
   def handle_info({:mensagem, texto}, %{conv: conv} = s) when conv != nil do
-    conversar(s, fn -> conv.conversar(s.tenant, texto) end)
-    {:noreply, s}
+    case junta_ms(conv) do
+      0 ->
+        conversar(s, fn -> conv.conversar(s.tenant, texto) end)
+        {:noreply, s}
+
+      ms ->
+        if s.timer, do: Process.cancel_timer(s.timer)
+        {:noreply, %{s | buf: [texto | s.buf], timer: Process.send_after(self(), :esvaziar, ms)}}
+    end
   end
 
   def handle_info({:mensagem, _texto}, s) do
@@ -142,6 +173,7 @@ defmodule Nucleo.Laco do
     {:noreply, s}
   end
 
+  def handle_info(:esvaziar, s), do: {:noreply, esvaziar(s)}
   def handle_info(_, s), do: {:noreply, s}
 
   # o texto/midia do corretor nao vira evento: so o resultado (resposta enviada ou falha sem conteudo)

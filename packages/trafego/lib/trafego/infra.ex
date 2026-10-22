@@ -126,6 +126,8 @@ defmodule Trafego.Notificar do
   alias Nucleo.Registro
 
   def enviar(tenant, texto) do
+    texto = Trafego.Iara.Texto.limpar(texto)
+
     case Application.get_env(:trafego, :notificar) do
       f when is_function(f, 2) ->
         f.(tenant, texto)

@@ -44,12 +44,17 @@ defmodule Nucleo.Automacoes.Trafego do
   def prefixo, do: "[Iara] "
 
   @doc "Conversa do corretor (texto do chat dele consigo mesmo) -> resposta do agente. O laco chama; ver Nucleo.Laco."
-  def conversar(tenant, texto), do: tenant |> Trafego.Agente.processar_mensagens(texto) |> Trafego.Voz.aplicar_seguro(tenant, "texto")
+  def conversar(tenant, texto) do
+    tenant |> Trafego.Agente.processar_mensagens(texto) |> Trafego.Iara.Texto.limpar_saida() |> Trafego.Voz.aplicar_seguro(tenant, "texto") |> Trafego.Iara.Texto.limpar_saida()
+  end
+
+  @doc "Janela (ms) para juntar mensagens do corretor em sequencia num so turno (Nucleo.Laco). Config `:trafego, :junta_ms`; padrao 3000, 0 desliga."
+  def junta_ms, do: Application.get_env(:trafego, :junta_ms, 3000)
 
   @doc "Midia que chegou pelo canal (criativo pelo WhatsApp)."
   def midia(tenant, msg) do
     origem = if match?(%Amarula.Msg{content: %Amarula.Content.Media{kind: :audio}}, msg), do: "audio", else: "texto"
-    tenant |> Trafego.Agente.receber_midia_mensagens(msg) |> Trafego.Voz.aplicar_seguro(tenant, origem)
+    tenant |> Trafego.Agente.receber_midia_mensagens(msg) |> Trafego.Iara.Texto.limpar_saida() |> Trafego.Voz.aplicar_seguro(tenant, origem) |> Trafego.Iara.Texto.limpar_saida()
   end
 
   @impl Nucleo.Automacao
