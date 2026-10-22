@@ -3,10 +3,13 @@ defmodule Nucleo.Canal.Amarula do
   Canal real (Amarula 0.5.10). Sessao em /opt/modular-agentes-data/amarula/<tenant>.
   So entrega ao laco o que vem do chat do proprio usuario: texto como `{:mensagem, texto}` e midia como `{:midia, msg}`
   (o download fica com quem trata a midia); sem confirmacao de leitura; nao registra conteudo.
+  Lista de permissao (1.5.1): a sala tem de ser a propria conta (consigo mesmo); grupos/broadcast/newsletter/terceiros nunca entram.
+  O envio (`enviar_texto/audio`) vai sempre para a propria conta, nunca para destino vindo de mensagem.
   O QR e o estado da conexao vao para `Nucleo.Canal.Estado` (so memoria); o QR so e impresso no terminal com `imprimir_qr: true` (padrao do pareamento manual).
   """
   @behaviour Nucleo.Canal
   use GenServer
+  require Logger
   alias Nucleo.Canal.Estado
 
   @raiz_padrao "/opt/modular-agentes-data/amarula"
@@ -14,14 +17,46 @@ defmodule Nucleo.Canal.Amarula do
   @doc "Pasta das sessoes (configuravel: `config :nucleo, :sessoes_raiz`)."
   def raiz, do: Application.get_env(:nucleo, :sessoes_raiz, @raiz_padrao)
 
-  @doc "Decide se uma Amarula.Msg entra no laco (puro; testavel sem rede)."
-  def filtrar(msg, own_chat?) do
+  @doc """
+  Decide se uma Amarula.Msg entra no laco (puro; testavel sem rede). Lista de permissao estrita: so passa se
+  `own_chat?` confirmar E a sala (`channel`, sem device) for uma das `contas` proprias (PN ou LID); grupo, broadcast,
+  newsletter, chat de outra pessoa e sala desconhecida nunca entram. Sem `contas` nada entra.
+  """
+  def filtrar(msg, own_chat?, contas \\ []) do
     cond do
-      not own_chat?.(msg) -> :ignorar
+      motivo(msg, own_chat?, contas) != :ok -> :ignorar
       msg.type == :text and is_binary(msg.content) -> {:entregar, msg.content}
       msg.type == :media -> {:midia, msg}
       true -> :ignorar
     end
+  end
+
+  @doc "`:ok` se a mensagem e da conversa consigo mesmo; senao `{motivo, servidor}` (so diagnostico: sem texto e sem numero)."
+  def motivo(msg, own_chat?, contas) do
+    case Map.get(msg, :channel) do
+      %Amarula.Address{kind: :group} ->
+        {:grupo, "g.us"}
+
+      %Amarula.Address{kind: kind} = sala when kind in [:pn, :lid] ->
+        if Enum.any?(contas, &Amarula.Address.same_account?(&1, sala)) and own_chat?.(msg), do: :ok, else: {:nao_e_proprio, servidor(sala)}
+
+      _ ->
+        {:sem_sala, "desconhecido"}
+    end
+  end
+
+  defp servidor(%Amarula.Address{kind: :pn}), do: "s.whatsapp.net"
+  defp servidor(%Amarula.Address{kind: :lid}), do: "lid"
+  defp servidor(_), do: "desconhecido"
+
+  # identidades proprias (PN e LID) da conta pareada; qualquer falha = lista vazia (nada entra)
+  defp contas_proprias(conn) do
+    me = get_in(GenServer.call(conn, :get_auth_creds), [:me]) || %{}
+    [me[:id], me[:lid]] |> Enum.reject(&is_nil/1) |> Enum.map(&Amarula.Address.parse/1) |> Enum.reject(&is_nil/1)
+  rescue
+    _ -> []
+  catch
+    _, _ -> []
   end
 
   @impl Nucleo.Canal
@@ -112,11 +147,14 @@ defmodule Nucleo.Canal.Amarula do
   end
 
   def handle_info({:amarula, :messages_upsert, %{messages: msgs}}, s) do
+    contas = contas_proprias(s.conn)
+    own = &Amarula.own_chat?(s.conn, &1)
+
     for m <- msgs do
-      case filtrar(m, &Amarula.own_chat?(s.conn, &1)) do
+      case filtrar(m, own, contas) do
         {:entregar, t} -> send(s.destino, {:mensagem, t})
         {:midia, msg} -> send(s.destino, {:midia, msg})
-        :ignorar -> :ok
+        :ignorar -> registrar_ignorada(motivo(m, own, contas))
       end
     end
 
@@ -124,4 +162,8 @@ defmodule Nucleo.Canal.Amarula do
   end
 
   def handle_info(_, s), do: {:noreply, s}
+
+  # diagnostico sem conteudo nem numero: so o motivo e o tipo de servidor da sala
+  defp registrar_ignorada({motivo, servidor}), do: Logger.debug("canal: mensagem ignorada motivo=#{motivo} servidor=#{servidor}")
+  defp registrar_ignorada(:ok), do: :ok
 end

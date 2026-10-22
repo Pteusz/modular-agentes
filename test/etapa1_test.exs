@@ -79,10 +79,12 @@ defmodule Etapa1Test do
   end
 
   test "canal real (Amarula): filtro do chat proprio, sem rede" do
+    self = Amarula.Address.pn("5511999990000")
+    contas = [self]
     own = fn msg -> msg.own end
-    assert {:entregar, "x"} = Canal.Amarula.filtrar(%{own: true, type: :text, content: "x"}, own)
-    assert :ignorar = Canal.Amarula.filtrar(%{own: false, type: :text, content: "x"}, own)
-    assert {:midia, _} = Canal.Amarula.filtrar(%{own: true, type: :media, content: nil}, own)
-    assert :ignorar = Canal.Amarula.filtrar(%{own: false, type: :media, content: nil}, own)
+    assert {:entregar, "x"} = Canal.Amarula.filtrar(%{own: true, channel: self, type: :text, content: "x"}, own, contas)
+    assert :ignorar = Canal.Amarula.filtrar(%{own: false, channel: self, type: :text, content: "x"}, own, contas)
+    assert {:midia, _} = Canal.Amarula.filtrar(%{own: true, channel: self, type: :media, content: nil}, own, contas)
+    assert :ignorar = Canal.Amarula.filtrar(%{own: false, channel: self, type: :media, content: nil}, own, contas)
   end
 end
