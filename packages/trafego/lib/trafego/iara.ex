@@ -7,8 +7,13 @@ defmodule Trafego.Iara do
   o significado de erros e bloqueios nunca depende da IA. O custo da geracao entra no custo_tokens (R$) e no teto do corretor.
 
   Perfil por corretor (registro "iara_perfil"): apresentada, horario (HH:MM; padrao 09:00) e horario_estado
-  (nao_perguntado | perguntado | definido | padrao). Nesta etapa so guarda a preferencia de horario; o envio diario e a 5.3.
-  As atualizacoes NAO podem ser desligadas (decisao do Mateus): so o horario muda.
+  (nao_perguntado | perguntado | definido | padrao). As atualizacoes NAO podem ser desligadas (decisao do Mateus): so o horario muda.
+
+  Apresentacao (trafego 1.11.0): NAO ha texto pronto nem pipeline; o primeiro contato e conversa do modelo (Trafego.Conversa) guiada pela
+  politica + este estado, que sao DADOS: "apresentacao" => %{"quem_sou" => bool, "como_aprendo" => bool} (o que a Iara REALMENTE disse),
+  "horario_estado", "horario_perguntas" (quantas vezes perguntou o horario). "apresentada" espelha quem_sou (compativel com o formato antigo:
+  perfil antigo com apresentada=true e sem "apresentacao" vale como quem_sou e como_aprendo ja ditos). Um item por mensagem; horario
+  combinado ou assumido (padrao) = apresentacao encerrada. Unico texto fixo: `apresentacao_minima/0`, so se o modelo falhar no primeiro contato.
   """
   alias Nucleo.Registro
   alias Trafego.{Evento, IA, TetoIA}
@@ -17,18 +22,10 @@ defmodule Trafego.Iara do
   @horario_padrao "09:00"
   @max_chars 900
 
-  @apresentacao "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora. Sou uma IA e cuido das suas campanhas de anuncios, do feed de imoveis e do desempenho. Me adapto ao seu jeito e aprendo com o tempo, melhorando a cada campanha. Se preferir, pode me mandar audio que eu entendo."
-  @pergunta_horario "Qual o melhor horario para eu te atualizar todo dia sobre as campanhas? Se voce nao disser, uso 9h; da para mudar depois."
+  # fallback de seguranca (modelo falhou no primeiro contato): UMA mensagem curta, nunca varias
+  @apresentacao_minima "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora, uma IA que cuida das suas campanhas de anuncios. Tive um probleminha agora; me manda de novo em instantes."
 
-  # a apresentacao sai em 2 mensagens curtas (quem sou; que aprendo com o tempo), nunca num bloco so
-  @apresentacao_msgs [
-    "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora. Sou uma IA e cuido das suas campanhas de anuncios, do feed de imoveis e do desempenho.",
-    "Me adapto ao seu jeito e aprendo com o tempo, melhorando a cada campanha. Se preferir, pode me mandar audio que eu entendo."
-  ]
-
-  def apresentacao, do: @apresentacao
-  def apresentacao_mensagens, do: @apresentacao_msgs
-  def pergunta_horario, do: @pergunta_horario
+  def apresentacao_minima, do: @apresentacao_minima
   def horario_padrao, do: @horario_padrao
 
   @doc "Instrucao de persona (usada pelo provedor de IA real em todas as geracoes de fala)."
@@ -49,6 +46,63 @@ defmodule Trafego.Iara do
   def atualizar(tenant, mudancas) do
     Registro.gravar(tenant, @chave, Map.merge(perfil(tenant), mudancas))
     :ok
+  end
+
+  # ---- apresentacao (estado em dados; o texto e do modelo)
+  @itens_apresentacao ~w(quem_sou como_aprendo)
+  @max_perguntas_horario 2
+
+  @doc "O que a Iara realmente ja disse na apresentacao: %{\"quem_sou\" => bool, \"como_aprendo\" => bool}."
+  def cobertura(tenant) do
+    p = perfil(tenant)
+
+    c =
+      case p["apresentacao"] do
+        %{} = m -> m
+        _ -> if p["apresentada"] == true, do: %{"quem_sou" => true, "como_aprendo" => true}, else: %{}
+      end
+
+    Map.new(@itens_apresentacao, &{&1, c[&1] == true})
+  end
+
+  @doc "Registra o que foi DITO: \"quem_sou\" | \"como_aprendo\" | \"horario_perguntado\" (conta a pergunta; o estado vira perguntado)."
+  def cobrir(tenant, item) when item in @itens_apresentacao do
+    mud = %{"apresentacao" => Map.put(cobertura(tenant), item, true)}
+    atualizar(tenant, if(item == "quem_sou", do: Map.put(mud, "apresentada", true), else: mud))
+  end
+
+  def cobrir(tenant, "horario_perguntado") do
+    p = perfil(tenant)
+    atualizar(tenant, %{"apresentacao" => cobertura(tenant), "horario_estado" => "perguntado", "horario_perguntas" => (p["horario_perguntas"] || 0) + 1})
+  end
+
+  def perguntas_horario(tenant), do: perfil(tenant)["horario_perguntas"] || 0
+  def max_perguntas_horario, do: @max_perguntas_horario
+
+  @doc "Grava o horario que o corretor escolheu (\"HH:MM\" ja normalizado)."
+  def definir_horario(tenant, hh), do: atualizar(tenant, %{"horario" => hh, "horario_estado" => "definido"})
+
+  @doc "Sem escolha depois de perguntar: vale o padrao (a atualizacao continua ligada)."
+  def assumir_padrao(tenant), do: atualizar(tenant, %{"horario" => @horario_padrao, "horario_estado" => "padrao"})
+
+  @doc "Apresentacao encerrada: disse quem e, como aprende e o horario esta combinado (ou assumido)."
+  def encerrada?(tenant) do
+    c = cobertura(tenant)
+    c["quem_sou"] and c["como_aprendo"] and perfil(tenant)["horario_estado"] in ["definido", "padrao"]
+  end
+
+  @doc "Proximo item (UM so): \"quem_sou\" | \"como_aprendo\" | \"perguntar_horario\" | \"aguardar_horario\" | nil (encerrada)."
+  def proximo_item(tenant) do
+    c = cobertura(tenant)
+    estado = perfil(tenant)["horario_estado"]
+
+    cond do
+      not c["quem_sou"] -> "quem_sou"
+      not c["como_aprendo"] -> "como_aprendo"
+      estado == "nao_perguntado" -> "perguntar_horario"
+      estado == "perguntado" -> "aguardar_horario"
+      true -> nil
+    end
   end
 
   @doc "Horario das atualizacoes diarias do corretor (\"HH:MM\"); padrao 09:00."
@@ -76,23 +130,18 @@ defmodule Trafego.Iara do
 
   # ---- fala
   @doc """
-  Texto-base -> texto natural da Iara. opts: situacao, dados (mapa), texto (do corretor), origem ("texto" | "audio"),
-  plano_id, primeiro (primeiro contato), pergunta_horario, omitir_base. Nunca falha: erro ou texto fora do contrato = texto fixo.
+  Texto-base -> texto natural da Iara. opts: situacao, dados (mapa), texto (do corretor), origem ("texto" | "audio"), plano_id.
+  Nunca falha: erro ou texto fora do contrato = texto fixo (o proprio texto-base).
   """
   def falar(tenant, base, opts \\ []) do
-    fixo = compor(base, opts)
-
     if opts[:fixo] == true or match?({:bloqueado, _}, TetoIA.status(tenant)) do
-      fixo
+      base
     else
       entrada = %{
         "situacao" => to_string(opts[:situacao] || "geral"),
         "base" => base,
         "mensagem_do_corretor" => opts[:texto],
         "origem" => opts[:origem] || "texto",
-        "primeiro_contato" => opts[:primeiro] || false,
-        "perguntar_horario" => opts[:pergunta_horario] || false,
-        "omitir_base" => opts[:omitir_base] || false,
         "dados" => opts[:dados] || %{},
         "plano" => opts[:plano_id]
       }
@@ -102,32 +151,20 @@ defmodule Trafego.Iara do
       case IA.chamar(tenant, :pequena, :falar, entrada) do
         {:ok, %{"texto" => t}, uso} ->
           Evento.custo(tenant, opts[:plano_id], "planejador", "falar", uso)
-          if valido?(t, base, opts), do: String.trim(t), else: fixo
+          if valido?(t, base, opts), do: String.trim(t), else: base
 
         _ ->
-          fixo
+          base
       end
     end
   end
 
-  @doc "Texto fixo (sem IA): apresentacao + texto-base + pergunta de horario, conforme o caso. Tambem e o que o provedor Falso devolve."
-  def compor(base, opts \\ []) do
-    [
-      if(opts[:primeiro], do: @apresentacao),
-      if(not (opts[:omitir_base] || false), do: base),
-      if(opts[:pergunta_horario], do: @pergunta_horario)
-    ]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.join(" ")
-  end
+  @doc "Texto sem IA (o que o provedor Falso devolve na fala): o proprio texto-base."
+  def compor(base, _opts \\ []), do: base
 
   defp valido?(t, base, opts) when is_binary(t) do
     t = String.trim(t)
-
-    t != "" and String.length(t) <= @max_chars and
-      (not (opts[:primeiro] || false) or t =~ "Iara") and
-      (not (opts[:pergunta_horario] || false) or t =~ "?") and
-      ((opts[:omitir_base] || false) or valores_mantidos?(base, t)) and numeradas_mantidas?(t, opts[:numeradas])
+    t != "" and String.length(t) <= @max_chars and valores_mantidos?(base, t) and numeradas_mantidas?(t, opts[:numeradas])
   end
 
   defp valido?(_, _, _), do: false
@@ -141,22 +178,7 @@ defmodule Trafego.Iara do
     ~r/\d{2,}/ |> Regex.scan(base) |> List.flatten() |> Enum.reject(&(String.trim(&1, "0") == "")) |> Enum.all?(&String.contains?(t, &1))
   end
 
-  # ---- horario e transcricao (IA pequena; custo no teto)
-  @doc "Le um horario no texto do corretor: {:ok, \"HH:MM\" | nil} | {:teto, info}. Erro do provedor = nil (nao entendi)."
-  def ler_horario(tenant, texto) do
-    case IA.chamar(tenant, :pequena, :horario, %{"texto" => texto}) do
-      {:ok, %{"horario" => h}, uso} ->
-        Evento.custo(tenant, nil, "planejador", "horario", uso)
-        {:ok, normalizar_horario(h)}
-
-      {:error, {:teto_ia, info}} ->
-        {:teto, info}
-
-      _ ->
-        {:ok, nil}
-    end
-  end
-
+  # ---- transcricao (IA pequena; custo no teto)
   @doc "Confere se a transcricao de um audio ficou duvidosa/ambigua: :ok | {:duvida, descricao} | {:teto, info}. Erro do provedor = :ok."
   def duvida_audio(tenant, fala) do
     case IA.chamar(tenant, :pequena, :checar_transcricao, %{"transcricao" => fala}) do

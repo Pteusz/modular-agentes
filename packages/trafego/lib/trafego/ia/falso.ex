@@ -19,26 +19,7 @@ defmodule Trafego.IA.Falso do
 
   # fala: devolve o texto-base composto, sem reescrever (a persona real vive no adaptador OpenAI)
   def chamar(faixa, :falar, entrada) do
-    opts = [
-      primeiro: entrada["primeiro_contato"] == true,
-      pergunta_horario: entrada["perguntar_horario"] == true,
-      omitir_base: entrada["omitir_base"] == true
-    ]
-
-    saida = %{"texto" => Trafego.Iara.compor(entrada["base"] || "", opts)}
-    {:ok, saida, uso(faixa, entrada, saida)}
-  end
-
-  # horario: "8h30", "7h", "08:30"
-  def chamar(faixa, :horario, %{"texto" => texto} = entrada) do
-    h =
-      case Regex.run(~r/(?<![\d-])(\d{1,2})\s*(?:h|:)\s*(\d{2})?(?!\d)/i, texto) do
-        [_, hh] -> Trafego.Iara.normalizar_horario(hh)
-        [_, hh, mm] -> Trafego.Iara.normalizar_horario("#{hh}:#{mm}")
-        _ -> nil
-      end
-
-    saida = %{"horario" => h}
+    saida = %{"texto" => Trafego.Iara.compor(entrada["base"] || "", [])}
     {:ok, saida, uso(faixa, entrada, saida)}
   end
 
@@ -72,7 +53,7 @@ defmodule Trafego.IA.Falso do
     saida =
       case Application.get_env(:trafego, :roteiro_ia) do
         nil ->
-          {:ok, simples(entrada["itens"] || [], String.contains?(entrada["instrucao"] || "", "(rascunho)"))}
+          {:ok, simples(entrada["itens"] || [], String.contains?(entrada["instrucao"] || "", "(rascunho)"), entrada["instrucao"] || "")}
 
         [] ->
           {:error, :roteiro_acabou}
@@ -95,11 +76,11 @@ defmodule Trafego.IA.Falso do
   defp passo({:texto, t}), do: {:ok, %{"texto" => t}}
   defp passo({:erro, e}), do: {:error, e}
 
-  defp simples(itens, rascunho?) do
+  defp simples(itens, rascunho?, instrucao) do
     case List.last(itens) do
       %{"papel" => "resultado", "saida" => s} ->
         dados = (case Jason.decode(s) do {:ok, %{} = m} -> m; _ -> %{} end)
-        %{"texto" => dados["proposta_texto"] || dados["resumo_pausa"] || ""}
+        %{"texto" => dados["proposta_texto"] || dados["resumo_pausa"] || apresentou(dados)}
 
       %{"papel" => "corretor", "texto" => t} ->
         n = t |> String.downcase() |> :unicode.characters_to_nfd_binary() |> String.replace(~r/\p{Mn}/u, "")
@@ -109,11 +90,26 @@ defmodule Trafego.IA.Falso do
           Regex.match?(~r/\bativ(a|ar|e|em)\b/, n) -> chamada("propor_ativar", %{"ref" => nil})
           Regex.match?(~r/\bpaus(a|ar|e|em)\b/, n) -> chamada("pausar", %{"ref" => nil, "motivo" => "pedido do corretor"})
           rascunho? -> chamada("planejar", %{"pedido" => t})
+          String.contains?(instrucao, "horario_das_atualizacoes=perguntado") and hora(t) != nil -> chamada("combinar_horario", %{"hora" => hora(t)})
+          String.contains?(instrucao, "se_apresentou=nao") and Regex.match?(~r/^(oi|ola|bom dia|boa tarde|boa noite)[\s!.,]*$/, n) -> chamada("apresentacao", %{"item" => "quem_sou"})
           true -> %{"texto" => "Posso te ajudar com as suas campanhas, os anuncios e o desempenho."}
         end
 
       _ ->
         %{"texto" => "Ok."}
+    end
+  end
+
+  # texto do Falso depois de registrar a apresentacao ou o horario (o real e do modelo)
+  defp apresentou(%{"horario" => hh}) when is_binary(hh), do: "Combinado, todo dia as #{hh}."
+  defp apresentou(%{"registrado" => "quem_sou"}), do: "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora, uma IA que cuida das suas campanhas."
+  defp apresentou(_), do: ""
+
+  defp hora(t) do
+    case Regex.run(~r/(?<![\d-])(\d{1,2})\s*(?:h|:)\s*(\d{2})?(?!\d)/i, t) do
+      [_, hh] -> Trafego.Iara.normalizar_horario(hh)
+      [_, hh, mm] -> Trafego.Iara.normalizar_horario("#{hh}:#{mm}")
+      _ -> nil
     end
   end
 

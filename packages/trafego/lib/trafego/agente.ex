@@ -6,8 +6,9 @@ defmodule Trafego.Agente do
   Estado: um plano "atual" por tenant (rascunho ou aguardando confirmacao). Nenhuma alteracao sem confirmacao clara:
   ambigua -> repergunta curta; negativa -> recusa. O texto do corretor nao vira evento.
 
-  Voz (etapa 5.1): as funcoes internas decidem os FATOS e devolvem o texto-base; `entregar/5` passa TODA resposta por
-  `Trafego.Iara.falar` (persona, primeiro contato, pergunta do horario). Audio e texto sao a mesma coisa para o dominio:
+  Voz (etapa 5.1): as funcoes internas decidem os FATOS e devolvem o texto-base; `entregar/4` passa TODA resposta por
+  `Trafego.Iara.falar` (persona). A apresentacao (primeiro contato, horario das atualizacoes) nao e injetada aqui: e conduzida pela
+  conversa (Trafego.Conversa), uma mensagem por vez. Audio e texto sao a mesma coisa para o dominio:
   so uma transcricao duvidosa gera uma pergunta "e isso mesmo?" antes de agir (a fala em duvida fica so em memoria).
   """
   alias Nucleo.Registro
@@ -16,8 +17,6 @@ defmodule Trafego.Agente do
 
   @nome "Nucleo.Automacoes.Trafego"
   @repergunta "so pra confirmar se entendi, posso fazer isso mesmo?"
-  # resposta curta ao horario: mais que isso e outro assunto (vale o padrao)
-  @max_resposta_horario 80
 
   @doc "Como `processar_mensagens/2`, mas com as mensagens do plano juntas num texto so (separadas por linha em branco)."
   def processar(tenant, texto), do: tenant |> processar_mensagens(texto) |> juntar()
@@ -36,7 +35,7 @@ defmodule Trafego.Agente do
   @doc """
   Processa uma mensagem do corretor (texto, ou a transcricao de um audio). {:ok, resposta} | {:error, motivo}
   `resposta` e um texto, ou uma lista de textos curtos (o plano sai em 4 a 5 mensagens; o Laco envia uma a uma).
-  Ordem: fala de audio em duvida aguardando "e isso mesmo?"; resposta ao horario das atualizacoes; plano aguardando confirmacao;
+  Ordem: fala de audio em duvida aguardando "e isso mesmo?"; plano aguardando confirmacao;
   proposta aberta (ativar/pausar); senao a CONVERSA (Trafego.Conversa: o modelo escolhe ferramentas, o codigo valida a saida).
   Nos leitores de sim/nao, o que nao for sim nem nao vai para a conversa, que responde e retoma a confirmacao pendente.
   """
@@ -64,7 +63,7 @@ defmodule Trafego.Agente do
     with :ok <- ativo(tenant) do
       case credencial(tenant) do
         :ok -> f.()
-        {:ok, msg} -> entregar(tenant, {:ok, msg}, texto, origem, horario: false)
+        {:ok, msg} -> entregar(tenant, {:ok, msg}, texto, origem)
         erro -> erro
       end
     end
@@ -105,7 +104,7 @@ defmodule Trafego.Agente do
     end
   end
 
-  # ---- conversa (texto e audio): fala em duvida pendente -> horario -> fluxo normal
+  # ---- conversa (texto e audio): fala em duvida pendente -> fluxo normal
   defp conversa(tenant, texto, origem) do
     case Memoria.pegar(tenant) do
       nil -> seguir(tenant, texto, origem)
@@ -113,41 +112,9 @@ defmodule Trafego.Agente do
     end
   end
 
-  defp seguir(tenant, texto, origem) do
-    if Iara.perfil(tenant)["horario_estado"] == "perguntado" and String.length(texto) < @max_resposta_horario do
-      resolver_horario(tenant, texto, origem)
-    else
-      # nao respondeu o horario (outro assunto): vale o padrao
-      if Iara.perfil(tenant)["horario_estado"] == "perguntado", do: padrao(tenant)
-      continuar(tenant, texto, origem)
-    end
-  end
+  defp seguir(tenant, texto, origem), do: entregar(tenant, despachar(tenant, texto), texto, origem)
 
-  defp continuar(tenant, texto, origem), do: entregar(tenant, despachar(tenant, texto), texto, origem)
-
-  defp padrao(tenant), do: Iara.atualizar(tenant, %{"horario" => Iara.horario_padrao(), "horario_estado" => "padrao"})
-
-  defp resolver_horario(tenant, texto, origem) do
-    case Iara.ler_horario(tenant, texto) do
-      {:ok, hh} when is_binary(hh) ->
-        definir_horario(tenant, hh, texto, origem)
-
-      {:ok, nil} ->
-        padrao(tenant)
-        continuar(tenant, texto, origem)
-
-      {:teto, info} ->
-        entregar(tenant, {:ok, TetoIA.mensagem(info)}, texto, origem, horario: false)
-    end
-  end
-
-  defp definir_horario(tenant, hh, texto, origem) do
-    Iara.atualizar(tenant, %{"horario" => hh, "horario_estado" => "definido"})
-    base = "Anotado! Todo dia as #{hh} eu te atualizo sobre as campanhas. Se quiser mudar, e so pedir." <> retomada(tenant)
-    entregar(tenant, {:ok, base}, texto, origem, horario: false)
-  end
-
-  # depois de responder o horario, volta ao que estava no ar (uma pergunta so)
+  # depois de responder outro assunto, volta ao que estava no ar (uma pergunta so)
   defp retomada(tenant) do
     case Plano.atual(tenant) do
       %{"status" => "rascunho"} = p -> if Plano.vazio?(p), do: "", else: " " <> pergunta_pendente(tenant, p)
@@ -177,10 +144,10 @@ defmodule Trafego.Agente do
           decidir_audio(tenant, fala, d, texto, origem)
 
         {:error, {:teto_ia, info}} ->
-          entregar(tenant, {:ok, TetoIA.mensagem(info)}, texto, origem, horario: false)
+          entregar(tenant, {:ok, TetoIA.mensagem(info)}, texto, origem)
 
         {:error, _} ->
-          entregar(tenant, {:ok, repergunta_audio(fala)}, texto, origem, horario: false)
+          entregar(tenant, {:ok, repergunta_audio(fala)}, texto, origem)
       end
     end
   end
@@ -192,58 +159,30 @@ defmodule Trafego.Agente do
 
   defp decidir_audio(tenant, _fala, "nao", texto, origem) do
     Memoria.limpar(tenant)
-    entregar(tenant, {:ok, "Ok, deixei esse audio de lado; nada foi alterado. Me conta de novo, por audio ou texto."}, texto, origem, horario: false)
+    entregar(tenant, {:ok, "Ok, deixei esse audio de lado; nada foi alterado. Me conta de novo, por audio ou texto."}, texto, origem)
   end
 
-  defp decidir_audio(tenant, fala, _, texto, origem), do: entregar(tenant, {:ok, repergunta_audio(fala)}, texto, origem, horario: false)
+  defp decidir_audio(tenant, fala, _, texto, origem), do: entregar(tenant, {:ok, repergunta_audio(fala)}, texto, origem)
 
   defp repergunta_audio(fala), do: "Ainda nao tenho certeza do que ouvi: \"#{fala}\". E isso mesmo?"
 
-  # ---- voz: texto-base -> fala da Iara (primeiro contato e pergunta do horario incluidos)
-  # res: {:ok, base} | {:ok, base, extra} (extra: situacao, dados, plano_id, vazio) | {:error, _}. opts: horario: false = nunca pergunta o horario
-  defp entregar(tenant, res, texto, origem, opts \\ []) do
-    r = entrega(tenant, res, texto, origem, opts)
+  # ---- voz: texto-base -> fala da Iara
+  # res: {:ok, base} | {:ok, base, extra} (extra: situacao, dados, plano_id, vazio) | {:error, _}
+  defp entregar(tenant, res, texto, origem) do
+    r = entrega(tenant, res, texto, origem)
     with {:ok, saida} <- r, do: Conversa.registrar(tenant, texto, saida)
     r
   end
 
-  defp entrega(_tenant, {:error, _} = e, _, _, _), do: e
-  defp entrega(tenant, {:ok, base}, texto, origem, opts), do: entrega(tenant, {:ok, base, []}, texto, origem, opts)
+  defp entrega(_tenant, {:error, _} = e, _, _), do: e
+  defp entrega(tenant, {:ok, base}, texto, origem), do: entrega(tenant, {:ok, base, []}, texto, origem)
 
-  # plano em varias mensagens curtas (texto fixo, sem IA): so a apresentacao e a pergunta do horario se juntam
-  defp entrega(tenant, {:ok, [_ | _] = lista, _extra}, _texto, _origem, opts) do
-    perfil = Iara.perfil(tenant)
-    primeiro = perfil["apresentada"] != true
-    perguntar = perfil["horario_estado"] == "nao_perguntado" and Keyword.get(opts, :horario, true) and ocioso?(tenant)
+  # plano em varias mensagens curtas (texto fixo, sem IA)
+  defp entrega(_tenant, {:ok, [_ | _] = lista, _extra}, _texto, _origem), do: {:ok, lista}
 
-    if primeiro, do: Iara.atualizar(tenant, %{"apresentada" => true})
-    if perguntar, do: Iara.atualizar(tenant, %{"horario_estado" => "perguntado"})
-
-    {:ok, (if primeiro, do: Iara.apresentacao_mensagens(), else: []) ++ lista ++ if(perguntar, do: [Iara.pergunta_horario()], else: [])}
-  end
-
-  defp entrega(tenant, {:ok, base, extra}, texto, origem, opts) when is_binary(base) do
-    perfil = Iara.perfil(tenant)
-    primeiro = perfil["apresentada"] != true
-    nao_perguntado = perfil["horario_estado"] == "nao_perguntado"
-    # primeiro contato sem assunto ("oi"): so se apresenta e pergunta o horario (nada de pergunta do plano junto)
-    omitir = primeiro and extra[:situacao] == :falta and extra[:vazio] == true
-    perguntar = nao_perguntado and (omitir or (Keyword.get(opts, :horario, true) and ocioso?(tenant)))
-
-    if primeiro, do: Iara.atualizar(tenant, %{"apresentada" => true})
-    if perguntar, do: Iara.atualizar(tenant, %{"horario_estado" => "perguntado"})
-
-    # mensagens curtas e separadas: apresentacao (2), a resposta, e a pergunta do horario por ultimo
-    falar_opts = [texto: texto, origem: origem, primeiro: false, pergunta_horario: false, omitir_base: false]
-    corpo = if omitir, do: [], else: [Iara.falar(tenant, base, falar_opts ++ Keyword.take(extra, [:situacao, :dados, :plano_id, :contexto, :fixo, :numeradas]))]
-    msgs = (if primeiro, do: Iara.apresentacao_mensagens(), else: []) ++ corpo ++ if(perguntar, do: [Iara.pergunta_horario()], else: [])
-    {:ok, (case msgs do [um] -> um; varias -> varias end)}
-  end
-
-  # nada pendente com o corretor (plano, proposta ou audio em duvida)
-  defp ocioso?(tenant) do
-    plano = Plano.atual(tenant)
-    (plano == nil or plano["status"] not in ["rascunho", "aguardando_confirmacao", "aguardando_criativo", "erro"]) and Proposta.atual(tenant) == nil and Memoria.pegar(tenant) == nil
+  defp entrega(tenant, {:ok, base, extra}, texto, origem) when is_binary(base) do
+    falar_opts = [texto: texto, origem: origem] ++ Keyword.take(extra, [:situacao, :dados, :plano_id, :contexto, :fixo, :numeradas])
+    {:ok, Iara.falar(tenant, base, falar_opts)}
   end
 
   # resposta curta a uma pergunta do sistema (so a fala de audio em duvida usa): texto longo ou com ";" e outro assunto
@@ -314,7 +253,7 @@ defmodule Trafego.Agente do
   end
 
   def receber_midia_mensagens(tenant, _msg) do
-    gate(tenant, nil, "texto", fn -> entregar(tenant, {:ok, "So aceito imagem (png ou jpg) ou video mp4 como criativo, ou audio (nota de voz)."}, nil, "texto", horario: false) end)
+    gate(tenant, nil, "texto", fn -> entregar(tenant, {:ok, "So aceito imagem (png ou jpg) ou video mp4 como criativo, ou audio (nota de voz)."}, nil, "texto") end)
   end
 
   defp midia_criativo(tenant, msg) do
@@ -339,7 +278,7 @@ defmodule Trafego.Agente do
   defp receber_audio(tenant, %Amarula.Msg{content: c}) do
     max_seg = Config.audio(:max_segundos, 120)
     max_bytes = Config.audio(:max_bytes, 10_000_000)
-    dizer = fn msg -> entregar(tenant, {:ok, msg}, nil, "audio", horario: false) end
+    dizer = fn msg -> entregar(tenant, {:ok, msg}, nil, "audio") end
 
     gate(tenant, nil, "audio", fn ->
       cond do
@@ -375,16 +314,16 @@ defmodule Trafego.Agente do
         Evento.emitir(tenant, "operacao", nil, "planejador", "audio_transcrito", %{"segundos" => uso["segundos"]})
 
         case if(String.valid?(texto), do: String.trim(texto), else: "") do
-          "" -> entregar(tenant, {:ok, "Nao consegui entender o audio. Tenta de novo falando mais perto do microfone ou escreve por texto; nada foi alterado."}, nil, "audio", horario: false)
+          "" -> entregar(tenant, {:ok, "Nao consegui entender o audio. Tenta de novo falando mais perto do microfone ou escreve por texto; nada foi alterado."}, nil, "audio")
           fala -> audio_como_texto(tenant, fala)
         end
 
       {:error, {:teto_ia, info}} ->
-        entregar(tenant, {:ok, TetoIA.mensagem(info)}, nil, "audio", horario: false)
+        entregar(tenant, {:ok, TetoIA.mensagem(info)}, nil, "audio")
 
       {:error, e} ->
         Evento.emitir(tenant, "operacao", nil, "planejador", "audio_falhou", %{"erro" => erro_curto(e)})
-        entregar(tenant, {:ok, "Nao consegui transcrever esse audio agora. Tenta de novo em instantes ou escreve por texto; nada foi alterado."}, nil, "audio", horario: false)
+        entregar(tenant, {:ok, "Nao consegui transcrever esse audio agora. Tenta de novo em instantes ou escreve por texto; nada foi alterado."}, nil, "audio")
     end
   end
 
@@ -400,10 +339,10 @@ defmodule Trafego.Agente do
 
       {:duvida, d} ->
         Memoria.guardar(tenant, fala)
-        entregar(tenant, {:ok, "Nao tenho certeza do que ouvi: #{d}. Entendi: \"#{fala}\". E isso mesmo?"}, fala, "audio", horario: false)
+        entregar(tenant, {:ok, "Nao tenho certeza do que ouvi: #{d}. Entendi: \"#{fala}\". E isso mesmo?"}, fala, "audio")
 
       {:teto, info} ->
-        entregar(tenant, {:ok, TetoIA.mensagem(info)}, nil, "audio", horario: false)
+        entregar(tenant, {:ok, TetoIA.mensagem(info)}, nil, "audio")
     end
   end
 

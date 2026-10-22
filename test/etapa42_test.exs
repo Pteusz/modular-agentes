@@ -370,6 +370,8 @@ defmodule Etapa42Test do
         assert length(posts(msrv)) == 5
 
         # ---- 9. falhas da OpenAI: nada executa, plano nao muda
+        # corretor ja apresentado: no primeiro contato a falha vira a apresentacao minima (1.11.0)
+        Trafego.Iara.atualizar(td, %{"apresentada" => true, "horario_estado" => "definido", "horario" => "09:00"})
         assert resp(Agente.processar(td, "FALHAR-OPENAI")) =~ "nada foi alterado"
         assert resp(Agente.processar(td, pedido)) =~ "confirma"
         no = length(HttpFalso.pedidos(osrv))

@@ -12,7 +12,7 @@ defmodule Trafego.IA.OpenAI do
   @destinos ~w(site whatsapp formulario)
 
   @impl true
-  def chamar(faixa, tarefa, entrada) when faixa in [:pequena, :media] and tarefa in [:planejar, :confirmar, :falar, :horario, :checar_transcricao] do
+  def chamar(faixa, tarefa, entrada) when faixa in [:pequena, :media] and tarefa in [:planejar, :confirmar, :falar, :checar_transcricao] do
     with {:ok, chave} <- chave(),
          {:ok, modelo} <- modelo(faixa),
          {:ok, corpo} <- pedir(chave, corpo(faixa, modelo, tarefa, entrada)),
@@ -199,18 +199,11 @@ defmodule Trafego.IA.OpenAI do
       "texto_base_com_os_fatos" => e["base"],
       "mensagem_do_corretor" => e["mensagem_do_corretor"],
       "veio_por" => e["origem"],
-      "primeiro_contato_se_apresente" => e["primeiro_contato"],
-      "termine_perguntando_o_melhor_horario_das_atualizacoes_diarias" => e["perguntar_horario"],
-      "nao_repita_o_texto_base_so_apresente_e_pergunte" => e["omitir_base"],
       "dados" => e["dados"],
       "corretor_fez_uma_pergunta" => e["respondendo_pergunta"] || false,
       "ultima_coisa_que_voce_pediu" => e["ultima_pergunta_feita"],
       "o_que_ja_temos_do_plano" => e["ja_temos"]
     })
-  end
-
-  defp corpo(faixa, modelo, :horario, e) do
-    base(faixa, modelo, "horario", instrucao_horario(), horario_schema(), %{"resposta_do_corretor" => e["texto"]})
   end
 
   defp corpo(faixa, modelo, :checar_transcricao, e) do
@@ -270,8 +263,6 @@ defmodule Trafego.IA.OpenAI do
   defp validar(:planejar, %{} = plano), do: {:ok, %{"plano" => limpar(plano)}}
   defp validar(:falar, %{"texto" => t}) when is_binary(t), do: {:ok, %{"texto" => t}}
   defp validar(:falar, _), do: {:error, :saida_invalida}
-  defp validar(:horario, %{"horario" => h}) when is_binary(h) or is_nil(h), do: {:ok, %{"horario" => h}}
-  defp validar(:horario, _), do: {:error, :saida_invalida}
   defp validar(:checar_transcricao, %{"duvida" => d}) when is_binary(d) or is_nil(d), do: {:ok, %{"duvida" => d}}
   defp validar(:checar_transcricao, _), do: {:error, :saida_invalida}
 
@@ -315,19 +306,11 @@ defmodule Trafego.IA.OpenAI do
     do: """
 
     TAREFA: escreva a SUA mensagem ao corretor a partir do "texto_base_com_os_fatos". Diga os mesmos fatos com as suas palavras, na voz da Iara, curto.
-    Se "primeiro_contato_se_apresente" for true, comece se apresentando (nome, equipe Ataque Total da Cury Construtora, que e uma IA, que se adapta ao jeito dele e aprende com o tempo).
-    Se "termine_perguntando_o_melhor_horario_das_atualizacoes_diarias" for true, termine perguntando o melhor horario para as atualizacoes diarias e diga que, sem resposta, usa 9h e da para mudar depois; as atualizacoes nao podem ser desligadas.
-    Se "nao_repita_o_texto_base_so_apresente_e_pergunte" for true, nao repita o texto base. Se "veio_por" for audio, trate como se ele tivesse escrito; so fale do audio se o texto base disser que ficou duvida.
+    Se "veio_por" for audio, trate como se ele tivesse escrito; so fale do audio se o texto base disser que ficou duvida.
     Se "corretor_fez_uma_pergunta" for true, responda primeiro a pergunta dele em 1 ou 2 frases simples (so sobre campanhas, anuncios e desempenho; fora disso recuse com educacao) e so depois retome o que falta, com outras palavras.
     Se "ultima_coisa_que_voce_pediu" tiver valor igual ao que o texto base pede, e a mesma pendencia: NAO repita a frase anterior, explique rapidinho por que precisa e peca de novo de um jeito diferente.
     Use "o_que_ja_temos_do_plano" so para nao pedir de novo o que ele ja disse; nao liste tudo. Nunca comece duas mensagens seguidas com a mesma frase.
     Mantenha TODOS os numeros, valores em R$, datas e ids do texto base exatamente como estao. Se o texto base for uma lista numerada de perguntas, mantenha a lista INTEIRA, com a mesma numeracao, em uma unica mensagem (nada de "uma coisa de cada vez" e nada de adiar perguntas).
-    """
-
-  defp instrucao_horario,
-    do: """
-    O corretor respondeu a pergunta sobre o melhor horario para receber atualizacoes diarias. Devolva o horario que ele escolheu em "HH:MM" (24h, ex.: "08:30").
-    Se ele nao disse um horario claro (ou falou de outro assunto), devolva null. Nao invente.
     """
 
   defp instrucao_checar,
@@ -339,9 +322,6 @@ defmodule Trafego.IA.OpenAI do
 
   defp texto_schema,
     do: %{"type" => "object", "additionalProperties" => false, "required" => ["texto"], "properties" => %{"texto" => %{"type" => "string"}}}
-
-  defp horario_schema,
-    do: %{"type" => "object", "additionalProperties" => false, "required" => ["horario"], "properties" => %{"horario" => %{"type" => ["string", "null"]}}}
 
   defp duvida_schema,
     do: %{"type" => "object", "additionalProperties" => false, "required" => ["duvida"], "properties" => %{"duvida" => %{"type" => ["string", "null"]}}}
