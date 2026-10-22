@@ -1,4 +1,5 @@
-# Teste da apresentacao adaptativa (trafego 1.11.0): o primeiro contato e conversa do modelo, uma mensagem por vez, guiada por dados.
+# Teste da apresentacao adaptativa (trafego 1.11.0, ganchos em 1.12.0): o primeiro contato e conversa do modelo, uma mensagem por vez,
+# cada uma com um gancho (pergunta natural), guiada por dados. Os itens sao registrados sozinhos pelo sistema (ou pela ferramenta).
 # Rodar: MIX_ENV=test mix test test/etapa55_test.exs
 # REGRA: tenants tp55_* (so os proprios dados). IA pelo provedor Falso com ROTEIRO (:roteiro_ia). NENHUMA chamada real a OpenAI/Meta.
 defmodule Etapa55Test do
@@ -75,18 +76,18 @@ defmodule Etapa55Test do
   end
 
   # ------------------------------------------------------------------------------------------------------------------
-  test "(i) apresentacao gradual: quem sou -> como aprendo -> horario, UMA mensagem curta por vez" do
+  test "(i) apresentacao gradual: quem sou -> como aprendo -> horario, UMA mensagem curta por vez, cada uma com gancho" do
     t = tenant_novo()
 
     roteiro([
       espia({:chamar, "apresentacao", %{"item" => "quem_sou"}}),
-      {:texto, "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora. Sou uma IA e cuido das suas campanhas."}
+      {:texto, "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora. Sou uma IA e cuido das suas campanhas. Você já anunciou imóvel por conta própria?"}
     ])
 
     r = dizer(t, "oi")
     assert [msg] = r
     assert msg =~ "Iara" and msg =~ "Ataque Total" and msg =~ "Cury Construtora" and msg =~ "IA"
-    refute msg =~ "?"
+    assert msg =~ "?" and Trafego.Conversa.gancho?(msg)
     i = instrucao()
     assert i =~ "se_apresentou=nao" and i =~ "explicou_que_aprende=nao" and i =~ "horario_das_atualizacoes=ainda nao perguntado"
     assert i =~ "proximo item" and i =~ "quem_sou"
@@ -94,25 +95,24 @@ defmodule Etapa55Test do
     assert Iara.cobertura(t) == %{"quem_sou" => true, "como_aprendo" => false}
     assert Iara.perfil(t)["horario_estado"] == "nao_perguntado"
 
+    # registro automatico: o modelo nao chama `apresentacao`, o sistema registra o item que o texto realmente diz
     roteiro([
-      espia({:chamar, "apresentacao", %{"item" => "como_aprendo"}}),
-      {:texto, "Eu me adapto ao seu jeito e aprendo com o tempo, melhorando a cada campanha. Pode mandar audio tambem."}
+      espia({:texto, "Ah, então já conhece o caminho. Eu vou me adaptando ao seu jeito e aprendendo com o tempo, melhoro a cada campanha. Prefere mandar áudio ou texto?"})
     ])
 
-    assert [msg2] = dizer(t, "oi, tudo bem?")
-    assert msg2 =~ "aprendo" and msg2 =~ "audio"
+    assert [msg2] = dizer(t, "ja, uns 2 anos")
+    assert msg2 =~ "aprendendo" and msg2 =~ "áudio"
     i = instrucao()
     assert i =~ "se_apresentou=sim" and i =~ "explicou_que_aprende=nao" and i =~ "como_aprendo"
     assert Iara.cobertura(t) == %{"quem_sou" => true, "como_aprendo" => true}
     assert Iara.perfil(t)["horario_estado"] == "nao_perguntado"
 
     roteiro([
-      espia({:chamar, "apresentacao", %{"item" => "horario_perguntado"}}),
-      {:texto, "Qual o melhor horario pra eu te mandar a atualizacao diaria? Se nao me disser, uso 09:00 e voce muda quando quiser."}
+      espia({:texto, "Fechado, áudio ou texto, como for melhor. Se você não disser outro, uso 09:00 e você muda quando quiser. Qual o melhor horário pra eu te mandar a atualização diária?"})
     ])
 
-    assert [msg3] = dizer(t, "legal")
-    assert msg3 =~ "horario" and msg3 =~ "?"
+    assert [msg3] = dizer(t, "audio mesmo")
+    assert msg3 =~ "horário" and msg3 =~ "?"
     i = instrucao()
     assert i =~ "explicou_que_aprende=sim" and i =~ "perguntar_horario"
     assert %{"horario_estado" => "perguntado", "horario_perguntas" => 1} = Iara.perfil(t)
@@ -124,9 +124,10 @@ defmodule Etapa55Test do
     roteiro([espia({:texto, "Oi!"})])
     dizer(t, "oi")
     i = instrucao()
-    assert i =~ "UM item por mensagem"
-    assert i =~ ~r/quem voce e/i and i =~ ~r/aprende/i and i =~ ~r/horario/i
-    assert i =~ ~r/Nao pergunte o que ele faz/i
+    assert i =~ "UM item" and i =~ "gancho"
+    assert i =~ ~r/quem voce e/i and i =~ ~r/aprendendo/i and i =~ ~r/horario/i
+    assert i =~ ~r/nao pergunte o que ele quer fazer/i
+    refute i =~ ~r/nao da para desligar|nao pode ser desligada/i
   end
 
   test "(ii) a politica deixa a Iara dizer que entende audio (o primeiro contato por audio esta na etapa 5.1)" do
@@ -211,9 +212,9 @@ defmodule Etapa55Test do
   test "(v) as atualizacoes nao desligam: so o horario muda; hora invalida nao grava nada" do
     t = perguntado()
 
-    roteiro([{:chamar, "lembrar", %{"chave" => "desligar_atualizacao", "valor" => "sim"}}, {:texto, "Isso eu nao posso desligar; so o horario muda."}])
+    roteiro([{:chamar, "lembrar", %{"chave" => "desligar_atualizacao", "valor" => "sim"}}, {:texto, "Entendi, tá pesando. Posso mandar num horário que te encaixe melhor, qual seria?"}])
     assert [msg] = dizer(t, "desliga a atualizacao diaria")
-    assert msg =~ ~r/nao/i
+    refute Trafego.Conversa.frase_de_desligar(msg)
     assert Iara.perfil(t)["horario_estado"] in ["perguntado", "padrao"]
     refute Map.has_key?(Iara.perfil(t), "desligada")
 
@@ -255,7 +256,7 @@ defmodule Etapa55Test do
     # dois itens na mesma mensagem: o segundo e recusado
     roteiro([
       {:chamar, [{"apresentacao", %{"item" => "quem_sou"}}, {"apresentacao", %{"item" => "como_aprendo"}}]},
-      {:texto, "Oi! Eu sou a Iara, da Ataque Total da Cury Construtora, uma IA."}
+      {:texto, "Oi! Eu sou a Iara, da Ataque Total da Cury Construtora, uma IA. Já mexeu com anúncio de imóvel antes?"}
     ])
 
     assert [_] = dizer(t, "oi")
@@ -265,7 +266,7 @@ defmodule Etapa55Test do
     assert {:erro, %{"erro" => "ja_apresentada"}, _} = Ferramentas.executar(t, "apresentacao", %{"item" => "quem_sou"}, ctx)
 
     # o texto precisa dizer o que foi registrado (nao se grava o que nao foi dito)
-    roteiro([{:chamar, "apresentacao", %{"item" => "como_aprendo"}}, {:texto, "Beleza, me diz o que precisa."}, {:texto, "Eu aprendo com o tempo e me adapto ao seu jeito."}])
+    roteiro([{:chamar, "apresentacao", %{"item" => "como_aprendo"}}, {:texto, "Beleza, me diz o que precisa."}, {:texto, "Eu aprendo com o tempo e me adapto ao seu jeito. Você já usou áudio comigo?"}])
     assert [msg] = dizer(t, "fala")
     assert msg =~ "aprendo"
     assert sobra() == []

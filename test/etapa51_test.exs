@@ -123,7 +123,7 @@ defmodule Etapa51Test do
   # ------------------------------------------------------------------------------------------------------------------
   test "persona: o texto de persona traz identidade, escopo, estilo e limites" do
     p = Iara.persona()
-    for trecho <- ["Iara", "Ataque Total", "Cury Construtora", "uma IA", "aprende", "recusa", "lista numerada", "propoe", "WhatsApp", "2 a 3 linhas"],
+    for trecho <- ["Iara", "Ataque Total", "Cury Construtora", "uma IA", "aprende", "recusa", "lista numerada", "propoe", "WhatsApp", "1 ou 2 frases", "Jeito de falar"],
         do: assert(p =~ trecho, "persona sem: #{trecho}")
 
     # 1.11.0: sem texto de apresentacao pronto; so a mensagem unica do fallback (modelo fora do ar no primeiro contato)
@@ -225,7 +225,8 @@ defmodule Etapa51Test do
     assert Iara.perfil(t)["apresentada"] == false
     r = dizer(t, "oi")
     assert r =~ "Eu sou a Iara" and r =~ "Ataque Total" and r =~ "Cury Construtora" and r =~ "IA"
-    refute r =~ "horario" or r =~ "?"
+    refute r =~ "horario"
+    assert Trafego.Conversa.gancho?(r), "a apresentacao abre um gancho (1.12.0)"
     assert Iara.cobertura(t) == %{"quem_sou" => true, "como_aprendo" => false}
     assert %{"apresentada" => true, "horario_estado" => "nao_perguntado"} = Iara.perfil(t)
 
@@ -280,9 +281,9 @@ defmodule Etapa51Test do
     assert Iara.horario(t) == "07:00"
 
     antes = Iara.perfil(t)
-    Application.put_env(:trafego, :roteiro_ia, [{:chamar, "lembrar", %{"chave" => "desligar_atualizacao", "valor" => "sim"}}, {:texto, "Isso nao da pra desligar, so mudar o horario."}])
+    Application.put_env(:trafego, :roteiro_ia, [{:chamar, "lembrar", %{"chave" => "desligar_atualizacao", "valor" => "sim"}}, {:texto, "Entendi, ta pesando. Posso mandar em outro horario, qual ficaria melhor pra voce?"}])
     r = dizer(t, "para de me mandar as atualizacoes")
-    assert r =~ ~r/nao (da|posso)/i and r =~ "horario"
+    assert r =~ "outro horario" and Trafego.Conversa.frase_de_desligar(r) == nil
     assert Iara.perfil(t) == antes
     refute r =~ ~r/desliguei|desativei|cancelei as atualiza/i
     Application.delete_env(:trafego, :roteiro_ia)

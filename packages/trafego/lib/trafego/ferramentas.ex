@@ -32,7 +32,7 @@ defmodule Trafego.Ferramentas do
     {"lembrar", "Guarda preferencia da Iara: resposta em texto/audio (para o horario da atualizacao diaria use `combinar_horario`).",
      [{"chave", {:enum, ~w(horario_atualizacao preferencia_voz)}, "o que lembrar"}, {"valor", :texto, "horario (ex.: 07:00) ou texto | audio"}]},
     {"combinar_horario",
-     "Grava o horario da atualizacao diaria das campanhas que o corretor escolheu, em HH:MM 24h (converta \"umas 8h\" -> 08:00, \"depois do almoco\" -> 14:00). Vago (\"mais tarde\"): pergunte antes. A atualizacao NAO pode ser desligada; so o horario muda.",
+     "Grava o horario da atualizacao diaria das campanhas que o corretor escolheu, em HH:MM 24h (converta \"umas 8h\" -> 08:00, \"depois do almoco\" -> 14:00). Vago (\"mais tarde\"): pergunte antes.",
      [{"hora", :texto, "horario em HH:MM, ex.: 08:00"}]},
     {"apresentacao",
      "Registra o que voce ACABOU de dizer na apresentacao, so depois de dizer na mensagem desta rodada e UM item por mensagem: quem_sou (nome, equipe, que e IA), como_aprendo (se adapta e aprende com o tempo) ou horario_perguntado (perguntou o melhor horario da atualizacao diaria).",

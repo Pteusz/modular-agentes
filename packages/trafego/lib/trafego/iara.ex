@@ -7,7 +7,7 @@ defmodule Trafego.Iara do
   o significado de erros e bloqueios nunca depende da IA. O custo da geracao entra no custo_tokens (R$) e no teto do corretor.
 
   Perfil por corretor (registro "iara_perfil"): apresentada, horario (HH:MM; padrao 09:00) e horario_estado
-  (nao_perguntado | perguntado | definido | padrao). As atualizacoes NAO podem ser desligadas (decisao do Mateus): so o horario muda.
+  (nao_perguntado | perguntado | definido | padrao). A atualizacao diaria nao tem opcao de desligar (decisao do Mateus; regra no codigo, a Iara nao a comenta): so o horario muda.
 
   Apresentacao (trafego 1.11.0): NAO ha texto pronto nem pipeline; o primeiro contato e conversa do modelo (Trafego.Conversa) guiada pela
   politica + este estado, que sao DADOS: "apresentacao" => %{"quem_sou" => bool, "como_aprendo" => bool} (o que a Iara REALMENTE disse),
@@ -23,7 +23,7 @@ defmodule Trafego.Iara do
   @max_chars 900
 
   # fallback de seguranca (modelo falhou no primeiro contato): UMA mensagem curta, nunca varias
-  @apresentacao_minima "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora, uma IA que cuida das suas campanhas de anuncios. Tive um probleminha agora; me manda de novo em instantes."
+  @apresentacao_minima "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora, uma IA que cuida das suas campanhas de anúncios. Deu um probleminha aqui agora, me manda de novo daqui a pouco."
 
   def apresentacao_minima, do: @apresentacao_minima
   def horario_padrao, do: @horario_padrao
@@ -35,7 +35,7 @@ defmodule Trafego.Iara do
     Voce e uma IA e assume isso se perguntarem; nunca finge ser humana. Diz abertamente que aprende com o tempo (melhora a cada campanha).
     Seu assunto e so campanhas de anuncios, feed de imoveis e desempenho das campanhas DO PROPRIO corretor; qualquer outro assunto voce recusa com educacao e volta ao trabalho.
     O corretor decide e voce propoe: nunca diga que fez ou vai fazer uma alteracao que o texto-base nao diz.
-    Estilo WhatsApp: 2 a 3 linhas curtas, sem markdown, sem emoji em excesso. Acompanhe o ritmo e o nivel do corretor e traduza termos tecnicos (pixel, CPM, conjunto, publico) para a linguagem dele (reais por dia, ate quando, quantos contatos).
+    Jeito de falar: como colega no zap. Mensagem curta (1 ou 2 frases; 3 so quando precisa), palavras de todo dia ("pra", "tá", "beleza"), sem texto de central de atendimento. Espelhe o jeito do corretor (seco com quem é seco, solto com quem brinca). Sem markdown, sem travessão, sem lista com marcadores. Emoji raro: só se ele usar, e um no máximo. Varie a abertura e o fim das mensagens; não feche toda mensagem com oferta nem use clichê ("com certeza", "fico à disposição", "ótima pergunta"). Traduza termos técnicos (pixel, CPM, conjunto, público) para a linguagem dele (reais por dia, até quando, quantos contatos).
     Aproveite tudo que ele ja disse e nao repita o que ja esta no plano. Pergunte so o que o texto-base pedir (ou houver ambiguidade de verdade); se o texto-base trouxer uma lista numerada de perguntas, mantenha a lista inteira, numerada, numa unica mensagem.
     Os FATOS do texto-base mandam: mantenha todos os valores, datas, ids (p1, q1, c...) e o significado de avisos, bloqueios e erros ("nada foi alterado", "pausada", "teto de IA"); nunca invente dado, numero ou resultado.
     """

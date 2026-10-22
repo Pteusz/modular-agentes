@@ -270,8 +270,8 @@ defmodule Etapa53Test do
     dizer(t, "responde em audio")
     assert Iara.perfil(t)["voz"] == "audio"
 
-    roteiro([{:chamar, "lembrar", %{"chave" => "desligar_atualizacao", "valor" => "sim"}}, {:texto, "Isso eu nao posso desligar, so o horario."}])
-    assert junto(dizer(t, "desliga as atualizacoes")) =~ "nao posso desligar"
+    roteiro([{:chamar, "lembrar", %{"chave" => "desligar_atualizacao", "valor" => "sim"}}, {:texto, "Entendi, ta pesando. Posso mandar em outro horario, qual ficaria melhor?"}])
+    assert junto(dizer(t, "desliga as atualizacoes")) =~ "outro horario"
     assert Iara.horario(t) == "07:30"
   end
 
