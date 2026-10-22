@@ -374,8 +374,8 @@ defmodule Etapa523Test do
     System.delete_env("OPENAI_API_KEY")
   end
 
-  test "versoes: nucleo 1.5.0 (canal com enviar_audio opcional) e trafego 1.10.0" do
-    assert to_string(Application.spec(:nucleo, :vsn)) == "1.5.0"
+  test "versoes: nucleo 1.5.1 (canal com enviar_audio opcional) e trafego 1.10.0" do
+    assert to_string(Application.spec(:nucleo, :vsn)) == "1.5.1"
     assert to_string(Application.spec(:trafego, :vsn)) == "1.10.0"
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:optional_callbacks)
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:callbacks)

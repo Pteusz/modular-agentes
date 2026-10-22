@@ -286,12 +286,15 @@ defmodule Etapa43Test do
     assert File.exists?(Path.join([midia_dir, tc, arq]))
 
     # midia de terceiro e descartada no canal; filtro do Amarula separa texto, midia propria e o resto
+    self = Amarula.Address.pn("5511999990000")
+    contas = [self]
     own = fn _ -> true end
     nao = fn _ -> false end
-    assert {:midia, ^msg} = Canal.Amarula.filtrar(msg, own)
-    assert :ignorar = Canal.Amarula.filtrar(msg, nao)
-    assert {:entregar, "oi"} = Canal.Amarula.filtrar(%Amarula.Msg{channel: :t, type: :text, raw: nil, content: "oi"}, own)
-    assert :ignorar = Canal.Amarula.filtrar(%Amarula.Msg{channel: :t, type: :reaction, raw: nil, content: nil}, own)
+    msg_p = %{msg | channel: self}
+    assert {:midia, ^msg_p} = Canal.Amarula.filtrar(msg_p, own, contas)
+    assert :ignorar = Canal.Amarula.filtrar(msg, nao, contas)
+    assert {:entregar, "oi"} = Canal.Amarula.filtrar(%Amarula.Msg{channel: self, type: :text, raw: nil, content: "oi"}, own, contas)
+    assert :ignorar = Canal.Amarula.filtrar(%Amarula.Msg{channel: self, type: :reaction, raw: nil, content: nil}, own, contas)
     Canal.Simulado.injetar_midia(ref, :terceiro, msg)
     Process.sleep(100)
     assert Canal.Simulado.ignoradas(ref) == 1

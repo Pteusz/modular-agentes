@@ -268,8 +268,9 @@ defmodule EtapaAudioTest do
     assert Canal.Simulado.ignoradas(ref) == 1
 
     # o filtro do Amarula ja entrega audio proprio ao laco como midia
-    m = audio("x")
-    assert {:midia, ^m} = Canal.Amarula.filtrar(m, fn _ -> true end)
-    assert :ignorar = Canal.Amarula.filtrar(m, fn _ -> false end)
+    self = Amarula.Address.pn("5511999990000")
+    m = %{audio("x") | channel: self}
+    assert {:midia, ^m} = Canal.Amarula.filtrar(m, fn _ -> true end, [self])
+    assert :ignorar = Canal.Amarula.filtrar(m, fn _ -> false end, [self])
   end
 end
