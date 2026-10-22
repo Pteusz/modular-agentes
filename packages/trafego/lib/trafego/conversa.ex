@@ -12,10 +12,11 @@ defmodule Trafego.Conversa do
   ficha do plano; texto que diz "pausei/ativei/criei/alterei" sem a execucao real no turno e rejeitado. Falhou: UMA correcao pedida ao
   modelo; persistindo, fallback. Teto de custo de IA: a mesma mensagem do TetoIA, sem alterar nada.
 
-  Apresentacao (trafego 1.12.0): sem texto pronto nem pipeline. A politica ensina o procedimento (um item por mensagem: quem sou,
+  Apresentacao (trafego 1.12.1): sem texto pronto nem pipeline. A politica ensina o procedimento (um item por mensagem: quem sou,
   como aprendo, horario das atualizacoes) e o ESTADO traz, em dados, o que ja foi dito (Trafego.Iara.cobertura/horario). O modelo registra
   o que disse com `apresentacao` (persistido so depois que o texto passa no validador) e grava o horario com `combinar_horario`. Perguntado
-  e sem escolha dele (ou ignorado), vale o padrao 9h; horario combinado = apresentacao encerrada (uma frase, sem pergunta). Falha do
+  e sem escolha dele (ou ignorado), vale o padrao 9h; horario combinado = apresentacao encerrada: UMA frase confirmando o horario + pergunta natural se ele ja quer criar a
+  primeira campanha (validada como gancho; uma vez so, marcada em `Iara.marcar_campanha_perguntada/1`). Falha do
   modelo no primeiro contato: UMA mensagem fixa curta (`Iara.apresentacao_minima/0`), marcada como dita.
 
   Devolve `{:ok, [textos], extra}` (lista de mensagens curtas) ou `{:ok, texto}` no teto.
@@ -55,7 +56,8 @@ defmodule Trafego.Conversa do
   c. O gancho e conversa, nao formulario: nao pergunte o que ele quer fazer nem repita pergunta que ele ja respondeu. Ele respondeu o gancho? Reaja em meia frase e siga para o proximo item.
   d. Se ele ja trouxe um pedido ou mandou audio, atenda o pedido primeiro (no maximo meia frase de apresentacao) e traga o proximo item numa mensagem depois, quando nao houver plano ou proposta em andamento.
   e. O sistema registra sozinho o que voce disse; nao chame `apresentacao`. O horario que ele disser ("umas 8h", "depois do almoco": converta para HH:MM) vai em `combinar_horario`; vago ("mais tarde"): pergunte UMA vez de novo.
-  f. Horario combinado = apresentacao ACABOU: confirme em UMA frase curta e pare. Sem pergunta, oferta nem proposta de campanha. Voce so volta a falar quando ele escrever.
+  f. Horario combinado (ESTADO: campanha_perguntada=nao) = fim da apresentacao: confirme o horario em UMA frase curta e, na mesma mensagem, pergunte com as suas palavras, de forma natural e diferente a cada vez, se ele ja esta pronto pra criar a primeira campanha com voce (a mensagem termina nessa pergunta). Nao liste opcoes nem explique como funciona.
+  g. Depois dessa pergunta a apresentacao acabou e o assunto e conversa normal: "sim", "pode", "bora" ou qualquer pedido dele segue o fluxo de criar campanha (`planejar`), sem repetir a pergunta nem se reapresentar. Se ele disser que nao, ou que agora nao da, responda curto e diga que e so chamar quando quiser, sem insistir e sem nova pergunta de gancho. Se ele so mudar o horario depois, confirme em uma frase, sem pergunta.
 
   EXEMPLOS DE TOM (so mostram o jeito; nunca copie nem repita essas frases, cada conversa pede palavras novas):
   - ele escreve seco, "oi": "Oi! Iara aqui, da Ataque Total da Cury. Sou uma IA, mas trabalho igual colega. Você já rodou anúncio de imóvel por conta própria?"
@@ -80,7 +82,9 @@ defmodule Trafego.Conversa do
       falhas: 0,
       corrigiu: false,
       plano_id: plano_id,
-      horario_inicial: Iara.perfil(tenant)["horario_estado"]
+      horario_inicial: Iara.perfil(tenant)["horario_estado"],
+      campanha_perguntada: Iara.campanha_perguntada?(tenant),
+      ocupado: ocupado?(tenant)
     }
 
     laco(tenant, base, ctx)
@@ -195,9 +199,9 @@ defmodule Trafego.Conversa do
       (n = numero_inventado(texto, st.permitido)) != nil -> {:erro, {:numero, n}}
       (v = afirma_sem_executar(texto, ctx)) != nil -> {:erro, {:afirmacao, v}}
       (i = apresentacao_nao_dita(texto, ctx)) != nil -> {:erro, {:apresentacao, i}}
-      sem_gancho?(texto, ctx) -> {:erro, :sem_gancho}
+      sem_gancho?(texto, st, ctx) -> {:erro, :sem_gancho}
       (f = frase_de_desligar(texto)) != nil -> {:erro, {:desligar, f}}
-      encerrou_longo?(texto, ctx) -> {:erro, :encerramento}
+      encerrou_longo?(texto, st, ctx) -> {:erro, :encerramento}
       true -> :ok
     end
   end
@@ -216,11 +220,19 @@ defmodule Trafego.Conversa do
 
   # gancho: a mensagem que entrega um item da apresentacao (sem encerrar) termina numa pergunta de verdade, que vale ele responder.
   # Criterio: a ultima frase e uma pergunta com 4 palavras ou mais ("Ja mexeu com anuncio de imovel?" vale; "Certo?" / "Entendeu?" nao).
-  defp sem_gancho?(texto, ctx) do
+  # O fechamento (horario combinado pela primeira vez, sem outra acao) tambem exige gancho: a pergunta de primeira campanha.
+  defp sem_gancho?(texto, st, ctx) do
     entrega = Enum.any?(ctx.efeitos, &match?({:apresentou, _}, &1))
     encerra = Enum.any?(ctx.efeitos, &(&1 == {:lembrou, "horario_atualizacao"}))
-    entrega and not encerra and not gancho?(texto)
+    ((entrega and not encerra) or fecha_apresentacao?(st, ctx)) and not gancho?(texto)
   end
+
+  # horario combinado e nada mais nesta mensagem, antes de a pergunta de primeira campanha ter sido feita, sem plano/proposta no ar
+  defp fecha_apresentacao?(st, ctx) do
+    so_horario(ctx) and Enum.any?(ctx.efeitos, &(&1 == {:lembrou, "horario_atualizacao"})) and not st.campanha_perguntada and not st.ocupado
+  end
+
+  defp so_horario(ctx), do: ctx.chamadas != [] and Enum.all?(ctx.chamadas, &(&1 in ["combinar_horario", "lembrar"]))
 
   @doc false
   def gancho?(texto) do
@@ -241,19 +253,25 @@ defmodule Trafego.Conversa do
     end
   end
 
-  # horario combinado e nada mais nesta mensagem: a apresentacao acabou, confirma em uma frase, sem pergunta
-  defp encerrou_longo?(texto, ctx) do
-    so_horario = ctx.chamadas != [] and Enum.all?(ctx.chamadas, &(&1 in ["combinar_horario", "lembrar"]))
-    so_horario and Enum.any?(ctx.efeitos, &(&1 == {:lembrou, "horario_atualizacao"})) and (String.contains?(texto, "?") or String.length(texto) > 200)
+  # horario combinado e nada mais nesta mensagem: confirma em uma frase curta. No fechamento da apresentacao leva a pergunta de primeira
+  # campanha (ate 300 caracteres); numa mudanca de horario posterior (pergunta ja feita) fica sem "?" e curta.
+  defp encerrou_longo?(texto, st, ctx) do
+    lembrou = so_horario(ctx) and Enum.any?(ctx.efeitos, &(&1 == {:lembrou, "horario_atualizacao"}))
+
+    cond do
+      not lembrou -> false
+      fecha_apresentacao?(st, ctx) -> String.length(texto) > 300
+      true -> String.contains?(texto, "?") or String.length(texto) > 200
+    end
   end
 
   defp aviso({:numero, n}), do: "o numero \"#{n}\" nao aparece em nenhum resultado de ferramenta, na mensagem do corretor nem na ficha."
   defp aviso({:afirmacao, v}), do: "voce afirmou \"#{v}\" mas nenhuma ferramenta executou isso nesta mensagem."
   defp aviso(:vazio), do: "a resposta veio vazia."
   defp aviso({:apresentacao, i}), do: "voce registrou \"#{i}\" na apresentacao mas o texto nao diz isso (registre so o que disse)."
-  defp aviso(:sem_gancho), do: "a mensagem da apresentacao precisa terminar com uma pergunta natural (4 palavras ou mais) que valha ele responder, ligada ao que ele falou."
+  defp aviso(:sem_gancho), do: "a mensagem da apresentacao precisa terminar com uma pergunta natural (4 palavras ou mais) que valha ele responder, ligada ao que ele falou (no fechamento do horario: se ele ja esta pronto pra criar a primeira campanha com voce)."
   defp aviso({:desligar, _}), do: "nao diga que \"nao da\" ou \"nao pode\" desligar; se ele pediu, ofereca ajustar o horario das atualizacoes, curto e natural."
-  defp aviso(:encerramento), do: "o horario ficou combinado e a apresentacao acabou: confirme em UMA frase curta, sem pergunta e sem propor nada."
+  defp aviso(:encerramento), do: "o horario ficou combinado: confirme em UMA frase curta (se ainda nao perguntou, termine com a pergunta de primeira campanha; se ja perguntou, sem pergunta nenhuma)."
 
   @numero ~r/\d+(?:[.,]\d+)*/
 
@@ -334,6 +352,7 @@ defmodule Trafego.Conversa do
   # grava o que a Iara realmente disse; perguntou o horario e ele nao escolheu (ou mudou de assunto): vale o padrao 9h
   defp registrar_apresentacao(tenant, ctx, st) do
     for {:apresentou, item} <- ctx.efeitos, do: Iara.cobrir(tenant, item)
+    if fecha_apresentacao?(st, ctx), do: Iara.marcar_campanha_perguntada(tenant)
 
     reperguntou = Enum.any?(ctx.efeitos, &(&1 == {:apresentou, "horario_perguntado"}))
 
@@ -373,10 +392,10 @@ defmodule Trafego.Conversa do
   defp entrega_extra(_), do: []
 
   # estourou limite, erro do modelo ou texto rejeitado 2x
-  defp fallback(tenant, ctx, _st) do
+  defp fallback(tenant, ctx, st) do
     if ctx.efeitos == [] and ctx.entrega == nil and not Iara.cobertura(tenant)["quem_sou"],
       do: primeiro_contato_fixo(tenant, ctx),
-      else: fallback_normal(tenant, ctx)
+      else: fallback_normal(tenant, ctx, st)
   end
 
   # modelo falhou no primeiro contato: UMA mensagem fixa curta (apresentacao minima), marcada como dita
@@ -385,7 +404,25 @@ defmodule Trafego.Conversa do
     saida(tenant, [Iara.apresentacao_minima()], ctx)
   end
 
-  defp fallback_normal(tenant, ctx) do
+  defp fallback_normal(tenant, ctx, st) do
+    if fecha_apresentacao?(st, ctx), do: fechamento_fixo(tenant, ctx), else: fallback_comum(tenant, ctx)
+  end
+
+  # modelo falhou no fechamento: o horario ja foi gravado; confirma e pergunta da primeira campanha (variacao pelo horario)
+  @fechamentos [
+    "Fechado, todo dia às %{hh}. Já quer criar a sua primeira campanha comigo?",
+    "Combinado, às %{hh} todo dia. Bora montar a sua primeira campanha agora?",
+    "Pronto, ficou %{hh}. Você já está pronto pra criar a primeira campanha comigo?"
+  ]
+
+  defp fechamento_fixo(tenant, ctx) do
+    hh = Iara.horario(tenant)
+    modelo = Enum.at(@fechamentos, :erlang.phash2({tenant, hh}, length(@fechamentos)))
+    Iara.marcar_campanha_perguntada(tenant)
+    saida(tenant, [String.replace(modelo, "%{hh}", hh)], ctx)
+  end
+
+  defp fallback_comum(tenant, ctx) do
     pausas = for {:pausou, i} <- ctx.efeitos, do: "Pausei #{i.nome} porque #{i.motivo}."
     cabeca = if ctx.efeitos == [] and ctx.entrega == nil, do: @falha, else: "Nao consegui concluir tudo agora."
 
@@ -432,15 +469,17 @@ defmodule Trafego.Conversa do
 
     proximo = Iara.proximo_item(tenant)
     ocupado = ocupado?(tenant)
+    campanha = Iara.campanha_perguntada?(tenant)
 
     quando =
       cond do
+        proximo == nil and not campanha -> "o horario foi combinado: confirme em uma frase e termine perguntando se ele ja esta pronto pra criar a primeira campanha (regra f)."
         proximo == nil -> "apresentacao encerrada: nao traga mais nada dela."
         ocupado -> "ha plano, proposta ou confirmacao em andamento: NAO traga apresentacao agora, atenda o que esta no ar."
         true -> "proximo item (UM so, e so se a mensagem dele deixar espaco): #{proximo}."
       end
 
-    "APRESENTACAO: se_apresentou=#{sn.(c["quem_sou"])}; explicou_que_aprende=#{sn.(c["como_aprendo"])}; horario_das_atualizacoes=#{horario}. #{quando}"
+    "APRESENTACAO: se_apresentou=#{sn.(c["quem_sou"])}; explicou_que_aprende=#{sn.(c["como_aprendo"])}; horario_das_atualizacoes=#{horario}; campanha_perguntada=#{sn.(campanha)}. #{quando}"
   end
 
   defp situacao_plano(%{"status" => "aguardando_confirmacao"}), do: "O corretor precisa responder sim ou nao ao resumo; nao execute nada por ele."

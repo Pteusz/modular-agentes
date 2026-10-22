@@ -101,7 +101,7 @@ defmodule Trafego.IA.Falso do
   end
 
   # texto do Falso depois de registrar a apresentacao ou o horario (o real e do modelo)
-  defp apresentou(%{"horario" => hh}) when is_binary(hh), do: "Combinado, todo dia as #{hh}."
+  defp apresentou(%{"horario" => hh}) when is_binary(hh), do: "Combinado, todo dia as #{hh}. Você já está pronto pra criar a sua primeira campanha comigo?"
   defp apresentou(%{"registrado" => "quem_sou"}), do: "Oi! Eu sou a Iara, da equipe Ataque Total da Cury Construtora, uma IA que cuida das suas campanhas. Você já anunciou imóvel antes?"
   defp apresentou(_), do: ""
 

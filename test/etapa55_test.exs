@@ -137,11 +137,13 @@ defmodule Etapa55Test do
     assert instrucao() =~ ~r/entende audio/i
   end
 
-  test "(iii) horario definido ENCERRA a apresentacao: uma frase curta, sem pergunta e sem oferta" do
+  test "(iii) horario definido ENCERRA a apresentacao: confirma em uma frase e pergunta da primeira campanha (uma vez so)" do
     t = perguntado()
-    roteiro([{:chamar, "combinar_horario", %{"hora" => "08:30"}}, {:texto, "Combinado, todo dia as 08:30."}])
+    roteiro([espia({:chamar, "combinar_horario", %{"hora" => "08:30"}}), {:texto, "Combinado, todo dia as 08:30. Você já está pronto pra criar a sua primeira campanha comigo?"}])
     assert [msg] = dizer(t, "pode ser 8h30")
-    assert msg =~ "08:30" and not (msg =~ "?")
+    assert instrucao() =~ "campanha_perguntada=nao"
+    assert msg =~ "08:30" and Trafego.Conversa.gancho?(msg)
+    assert Iara.perfil(t)["campanha_perguntada"] == true
     assert Iara.horario(t) == "08:30"
     assert %{"horario_estado" => "definido"} = Iara.perfil(t)
     assert Iara.encerrada?(t)
@@ -154,24 +156,40 @@ defmodule Etapa55Test do
     assert instrucao() =~ "apresentacao encerrada"
   end
 
-  test "(iii)(viii) depois do horario o validador barra pergunta e oferta de campanha: corrige uma vez e fica na frase curta" do
+  test "(iii)(viii) o fechamento exige a pergunta de primeira campanha; texto longo e barrado; mudar o horario depois NAO repete a pergunta" do
     t = perguntado()
+    pergunta = "Combinado, todo dia as 07:00. Você já está pronto pra criar a sua primeira campanha comigo?"
 
     roteiro([
       {:chamar, "combinar_horario", %{"hora" => "07:00"}},
-      {:texto, "Combinado, 07:00! Quer que eu monte uma campanha pra voce agora?"},
-      {:texto, "Combinado, todo dia as 07:00."}
+      {:texto, "Combinado, todo dia as 07:00."},
+      {:texto, pergunta}
     ])
 
     assert [msg] = dizer(t, "7h")
-    assert msg == "Combinado, todo dia as 07:00."
+    assert msg == pergunta
     assert sobra() == []
 
     # texto longo tambem e barrado
     u = perguntado()
     longo = "Combinado, todo dia as 08:30. " <> String.duplicate("Depois a gente conversa sobre tudo com calma e vamos ver o que fazer. ", 5)
-    roteiro([{:chamar, "combinar_horario", %{"hora" => "08:30"}}, {:texto, longo}, {:texto, "Combinado, 08:30."}])
-    assert ["Combinado, 08:30."] = dizer(u, "8h30")
+    roteiro([{:chamar, "combinar_horario", %{"hora" => "08:30"}}, {:texto, longo <> "Ja quer criar a primeira campanha?"}, {:texto, "Combinado, 08:30. Você já está pronto pra criar a sua primeira campanha comigo?"}])
+    assert [_] = dizer(u, "8h30")
+    assert sobra() == []
+
+    # a pergunta ja foi feita: mudar o horario depois e uma frase, sem pergunta (com pergunta e corrigido)
+    roteiro([{:chamar, "combinar_horario", %{"hora" => "06:00"}}, {:texto, "Troquei pra 06:00. Quer montar a campanha agora?"}, {:texto, "Troquei pra 06:00."}])
+    assert ["Troquei pra 06:00."] = dizer(t, "muda pra 6h")
+    assert sobra() == []
+  end
+
+  test "(iii)(ix) fallback do fechamento: modelo falha duas vezes, o horario fica gravado e a mensagem fixa tambem pergunta da primeira campanha" do
+    t = perguntado()
+    ruim = "Combinado, todo dia as 07:00."
+    roteiro([{:chamar, "combinar_horario", %{"hora" => "07:00"}}, {:texto, ruim}, {:texto, ruim}])
+    assert [msg] = dizer(t, "7h")
+    assert msg =~ "07:00" and Trafego.Conversa.gancho?(msg)
+    assert Iara.horario(t) == "07:00" and Iara.campanha_perguntada?(t)
   end
 
   test "(iv) sem escolha depois de perguntado: vale o padrao 09:00 (a atualizacao continua ligada)" do
@@ -226,7 +244,7 @@ defmodule Etapa55Test do
 
     # `lembrar horario_atualizacao` continua valendo e vira o mesmo caminho
     w = perguntado()
-    roteiro([{:chamar, "lembrar", %{"chave" => "horario_atualizacao", "valor" => "07:15"}}, {:texto, "Combinado, todo dia as 07:15."}])
+    roteiro([{:chamar, "lembrar", %{"chave" => "horario_atualizacao", "valor" => "07:15"}}, {:texto, "Combinado, todo dia as 07:15. Você já está pronto pra criar a sua primeira campanha comigo?"}])
     dizer(w, "7:15")
     assert Iara.horario(w) == "07:15" and Iara.encerrada?(w)
   end

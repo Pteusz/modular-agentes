@@ -373,7 +373,7 @@ defmodule Etapa523Test do
 
   test "versoes: nucleo 1.6.0 (canal com enviar_audio opcional) e trafego 1.12.0" do
     assert to_string(Application.spec(:nucleo, :vsn)) == "1.6.0"
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.12.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.12.1"
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:optional_callbacks)
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:callbacks)
     Code.ensure_loaded!(Nucleo.Canal.Simulado)

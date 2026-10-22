@@ -250,14 +250,16 @@ defmodule Etapa56Test do
       assert msg == Iara.apresentacao_minima()
     end
 
-    test "o horario combinado encerra: sem gancho e sem pergunta; atender pedido tambem nao exige gancho" do
+    test "o horario combinado fecha com a pergunta da primeira campanha; atender pedido nao exige gancho" do
       t = tenant_novo()
       Iara.cobrir(t, "quem_sou")
       Iara.cobrir(t, "como_aprendo")
       Iara.cobrir(t, "horario_perguntado")
-      roteiro([{:chamar, "combinar_horario", %{"hora" => "08:00"}}, {:texto, "Fechado, todo dia às 8h."}])
-      assert ["Fechado, todo dia às 8h."] = dizer(t, "8h")
+      roteiro([{:chamar, "combinar_horario", %{"hora" => "08:00"}}, {:texto, "Fechado, todo dia às 8h."}, {:texto, "Fechado, todo dia às 8h. Já quer criar a sua primeira campanha comigo?"}])
+      assert ["Fechado, todo dia às 8h. Já quer criar a sua primeira campanha comigo?"] = dizer(t, "8h")
       assert Iara.encerrada?(t)
+      assert [%{"motivo" => m}] = rejeicoes(t)
+      assert m =~ "pergunta"
 
       u = tenant_novo()
       Iara.cobrir(u, "quem_sou")
@@ -318,7 +320,7 @@ defmodule Etapa56Test do
       m3 = turno(t, "áudio", {:texto, "Show, pode mandar áudio à vontade. Se não me disser outro, mando a atualização diária das campanhas às 9h. Qual horário fica melhor pra você?"}, :a)
       assert Iara.perfil(t)["horario_estado"] == "perguntado"
 
-      m4 = turno(t, "8h", [{:chamar, "combinar_horario", %{"hora" => "08:00"}}, {:texto, "Fechado, todo dia às 8h."}], :a)
+      m4 = turno(t, "8h", [{:chamar, "combinar_horario", %{"hora" => "08:00"}}, {:texto, "Fechado, todo dia às 8h. Já quer criar a sua primeira campanha comigo?"}], :a)
       assert Iara.encerrada?(t) and Iara.horario(t) == "08:00"
       transcricao("A: abertura seca", [{"oi", m1}, {"já, mas nunca deu resultado", m2}, {"áudio", m3}, {"8h", m4}])
     end
@@ -329,7 +331,7 @@ defmodule Etapa56Test do
       m2 = turno(t, "todo mês kkk", {:texto, "Boa, então a gente se entende rápido. Eu me adapto ao seu jeito e vou aprendendo com o tempo, melhorando a cada campanha. Gosta mais de mandar áudio ou de escrever?"}, :b)
       m3 = turno(t, "escrevo mesmo, áudio é chato", {:texto, "Beleza, texto então — me diz uma coisa: que horário é melhor pra eu mandar a atualização das campanhas todo dia? Sem resposta, uso 9h."}, :b)
       assert m3 =~ "texto então, me diz"
-      m4 = turno(t, "umas 7h30", [{:chamar, "combinar_horario", %{"hora" => "07:30"}}, {:texto, "Combinado, 7h30 todo dia."}], :b)
+      m4 = turno(t, "umas 7h30", [{:chamar, "combinar_horario", %{"hora" => "07:30"}}, {:texto, "Combinado, 7h30 todo dia. Bora montar a sua primeira campanha agora?"}], :b)
       assert Iara.encerrada?(t) and Iara.horario(t) == "07:30"
       transcricao("B: abertura brincalhona", [{"e aí, tudo certo?? kkk", m1}, {"todo mês kkk", m2}, {"escrevo mesmo, áudio é chato", m3}, {"umas 7h30", m4}])
     end
@@ -347,6 +349,47 @@ defmodule Etapa56Test do
       refute m4 =~ "?"
       assert %{"horario_estado" => "padrao", "horario" => "09:00"} = Iara.perfil(t)
       transcricao("C: pergunta direta", [{"Bom dia, quem é você?", m1}, {"uns 5", m2}, {"pode", m3}, {"como estão minhas campanhas?", m4}])
+    end
+  end
+
+  describe "fechamento da apresentacao: primeira campanha (1.12.1)" do
+    defp fechado(t) do
+      for i <- ~w(quem_sou como_aprendo horario_perguntado), do: Iara.cobrir(t, i)
+      roteiro([{:chamar, "combinar_horario", %{"hora" => "08:00"}}, {:texto, "Fechado, todo dia às 8h. Já está pronto pra criar a sua primeira campanha comigo?"}])
+      assert [msg] = dizer(t, "8h")
+      msg
+    end
+
+    test "o fechamento termina em pergunta sobre a primeira campanha e marca o estado" do
+      t = tenant_novo()
+      msg = fechado(t)
+      assert Conversa.gancho?(msg) and msg =~ "campanha"
+      assert Iara.campanha_perguntada?(t) and Iara.perfil(t)["campanha_perguntada"] == true
+      assert Iara.encerrada?(t)
+    end
+
+    test "resposta 'sim' segue o fluxo normal de criar campanha, sem repetir a pergunta nem se reapresentar" do
+      t = tenant_novo()
+      fechado(t)
+      pid = self()
+      espia = fn entrada -> send(pid, {:instrucao, entrada["instrucao"]}) && {:chamar, "planejar", %{"pedido" => "pedido objetivo vender; imovel Torre Sul"}} end
+      roteiro([espia, {:texto, "Bora! Qual o orçamento por dia pra essa campanha?"}])
+      assert [msg | _] = dizer(t, "sim, bora")
+      assert_received {:instrucao, i}
+      assert i =~ "campanha_perguntada=sim" and i =~ "apresentacao encerrada"
+      assert msg =~ "orçamento"
+      assert Trafego.Plano.atual(t) != nil
+    end
+
+    test "resposta 'nao': resposta curta, sem nova pergunta de gancho e sem repetir a pergunta depois" do
+      t = tenant_novo()
+      fechado(t)
+      roteiro([{:texto, "Tranquilo, quando quiser é só me chamar."}])
+      assert ["Tranquilo, quando quiser é só me chamar."] = dizer(t, "agora não")
+      assert sobra() == []
+      roteiro([{:texto, "Por enquanto você não tem campanha rodando."}])
+      assert ["Por enquanto você não tem campanha rodando."] = dizer(t, "como estão as campanhas?")
+      assert sobra() == []
     end
   end
 
@@ -421,10 +464,10 @@ defmodule Etapa56Test do
       assert sobra() == []
     end
 
-    test "depois do horario combinado a Iara fica quieta: nenhuma mensagem sem o corretor escrever" do
+    test "depois do fechamento a Iara fica quieta: nenhuma mensagem sem o corretor escrever" do
       t = tenant_novo()
       for i <- ~w(quem_sou como_aprendo horario_perguntado), do: Iara.cobrir(t, i)
-      roteiro([{:chamar, "combinar_horario", %{"hora" => "08:00"}}, {:texto, "Fechado, todo dia às 8h."}])
+      roteiro([{:chamar, "combinar_horario", %{"hora" => "08:00"}}, {:texto, "Fechado, todo dia às 8h. Já quer criar a sua primeira campanha comigo?"}])
       {:ok, l} = Nucleo.Laco.iniciar(t)
       ref = Nucleo.Laco.canal(l)
       Canal.Simulado.injetar(ref, :proprio, "8h")
