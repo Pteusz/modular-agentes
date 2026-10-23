@@ -49,7 +49,9 @@ defmodule Trafego.Monitor do
     metricas = ler_metricas(tenant, p, hoje)
     estado = classificar(p, metricas, encerrado?)
 
+    mudou? = p["ultimo_estado"] != to_string(estado)
     p = registrar_estado(tenant, p, estado)
+    if encerrado? or (mudou? and estado != :dados_insuficientes), do: desempenho(tenant, p, estado, metricas, encerrado?, agora)
     p = if estado == :desvio, do: desvio(tenant, p, metricas, agora), else: p
     p = relatorio(tenant, p, metricas, estado, agora, encerrado?)
     p = if encerrado?, do: Map.put(p, "status", "encerrada"), else: p
@@ -92,6 +94,14 @@ defmodule Trafego.Monitor do
     else
       Evento.emitir(tenant, "resultado", p["id"], "monitor", nome)
       Map.put(p, "ultimo_estado", nome)
+    end
+  end
+
+  # laco de aprendizado: UMA vez por mudanca conclusiva e UMA no fechamento da janela; falha so vira evento (o Monitor segue)
+  defp desempenho(tenant, p, estado, metricas, final?, agora) do
+    case Trafego.Aprendizado.registrar_desempenho(tenant, p, estado, metricas: metricas, final: final?, agora: agora) do
+      :ok -> :ok
+      _ -> Evento.emitir(tenant, "resultado", p["id"], "monitor", "erro_registro_desempenho")
     end
   end
 
