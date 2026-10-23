@@ -101,8 +101,17 @@ defmodule Trafego.Iara do
     p["campanha_perguntada"] == true or p["horario_estado"] in ["definido", "padrao"]
   end
 
-  @doc "Marca a pergunta de primeira campanha como feita (a apresentacao acabou; o proximo sim ja e conversa normal de campanha)."
-  def marcar_campanha_perguntada(tenant), do: atualizar(tenant, %{"campanha_perguntada" => true})
+  @doc """
+  Marca a pergunta de primeira campanha como feita (a apresentacao acabou; o proximo sim ja e conversa normal de campanha) e liga o
+  marcador "pergunta_aberta" (trafego 1.12.3): a pergunta esta no ar ate o corretor responder (`fechar_pergunta/1`).
+  """
+  def marcar_campanha_perguntada(tenant), do: atualizar(tenant, %{"campanha_perguntada" => true, "pergunta_aberta" => true})
+
+  @doc "A pergunta de primeira campanha esta no ar (feita e ainda nao respondida)? Perfil sem o campo (legado) = nao."
+  def pergunta_aberta?(tenant), do: perfil(tenant)["pergunta_aberta"] == true
+
+  @doc "O corretor respondeu: desliga o marcador (so grava se estava ligado)."
+  def fechar_pergunta(tenant), do: if(pergunta_aberta?(tenant), do: atualizar(tenant, %{"pergunta_aberta" => false}), else: :ok)
 
   @doc "Proximo item (UM so): \"quem_sou\" | \"como_aprendo\" | \"perguntar_horario\" | \"aguardar_horario\" | nil (encerrada)."
   def proximo_item(tenant) do

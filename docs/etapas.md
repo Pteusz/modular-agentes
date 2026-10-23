@@ -116,3 +116,11 @@ Teste geral passando, mix test das etapas anteriores passando, docs/estado.md e 
 5.7 Diretrizes da Iara, passo 1 (trafego 1.12.2)
 - STATUS: branch diretrizes; teste test/etapa57_test.exs. AGUARDA APROVACAO (sem push, merge, tag nem deploy).
 - A politica de conversa.ex virou lista de diretrizes (packages/trafego/lib/trafego/diretrizes.ex); casamento por estado em codigo, nenhuma chamada nova ao modelo. Com apresentacao pendente o texto e byte a byte o da politica antiga.
+
+5.8 Diretrizes da Iara, passo 2 (trafego 1.12.3)
+- STATUS: branch diretrizes2; teste test/etapa58_test.exs. AGUARDA APROVACAO (sem push, merge, tag nem deploy).
+- A: regra g (:depois_da_pergunta) so casa com o marcador pergunta_aberta no iara_perfil (liga em marcar_campanha_perguntada/1, desliga no primeiro turno posterior da Conversa que finaliza; fallback nao desliga; legado sem campo = desligado, sem migracao). Linha ESTADO intacta.
+- B: cada diretriz tem valida opcional; Conversa.validar roda os validadores das diretrizes casadas no inicio do turno mais os globais. Mesmas rejeicoes nos mesmos casos.
+- C: a ferramenta apresentacao so e oferecida quando a diretriz :apresentacao casa; combinar_horario fica sempre.
+- Sem chamada nova ao modelo, sem mudanca no contrato Nucleo.Automacao. etapa57 (a)/(b): assert da regra g antiga trocado por refute (marcador desligado).
+- Passo 3 (nao implementado): promover Diretrizes ao nucleo como callback opcional quando a automacao de redes sociais precisar.

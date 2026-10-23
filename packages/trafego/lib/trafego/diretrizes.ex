@@ -38,7 +38,7 @@ defmodule Trafego.Diretrizes do
   """
 
   @depois_da_pergunta """
-  g. Depois dessa pergunta a apresentacao acabou e o assunto e conversa normal: "sim", "pode", "bora" ou qualquer pedido dele segue o fluxo de criar campanha (`planejar`), sem repetir a pergunta nem se reapresentar. Se ele disser que nao, ou que agora nao da, responda curto e diga que e so chamar quando quiser, sem insistir e sem nova pergunta de gancho. Se ele so mudar o horario depois, confirme em uma frase, sem pergunta.
+  g. Voce acabou de perguntar se ele ja esta pronto pra criar a primeira campanha: a apresentacao acabou e o assunto e conversa normal: "sim", "pode", "bora" ou qualquer pedido dele segue o fluxo de criar campanha (`planejar`), sem repetir a pergunta nem se reapresentar. Se ele disser que nao, ou que agora nao da, responda curto e diga que e so chamar quando quiser, sem insistir e sem nova pergunta de gancho. Se ele so mudar o horario depois, confirme em uma frase, sem pergunta.
   """
 
   @exemplos_de_tom """
@@ -52,8 +52,14 @@ defmodule Trafego.Diretrizes do
 
   @diretrizes [
     %{id: :regras_e_jeito, casa: :sempre, acao: @regras_e_jeito},
-    %{id: :apresentacao, casa: &__MODULE__.apresentacao_pendente?/1, acao: @apresentacao},
-    %{id: :depois_da_pergunta, casa: :sempre, acao: @depois_da_pergunta},
+    %{
+      id: :apresentacao,
+      casa: &__MODULE__.apresentacao_pendente?/1,
+      acao: @apresentacao,
+      valida: [:apresentacao_nao_dita, :sem_gancho, :fechamento_longo],
+      oferece: ["apresentacao"]
+    },
+    %{id: :depois_da_pergunta, casa: &__MODULE__.pergunta_aberta?/1, acao: @depois_da_pergunta},
     %{id: :exemplos_de_tom, casa: :sempre, acao: @exemplos_de_tom}
   ]
 
@@ -61,14 +67,34 @@ defmodule Trafego.Diretrizes do
   def todas, do: @diretrizes
 
   @doc "Contexto de casamento, calculado uma vez por turno."
-  def contexto(tenant), do: %{proximo_item: Iara.proximo_item(tenant)}
+  def contexto(tenant), do: %{proximo_item: Iara.proximo_item(tenant), pergunta_aberta: Iara.pergunta_aberta?(tenant)}
 
   @doc "A apresentacao so entra enquanto houver item pendente."
   def apresentacao_pendente?(%{proximo_item: proximo}), do: proximo != nil
 
+  @doc "A regra g so entra com a pergunta de primeira campanha no ar (marcador `pergunta_aberta` do perfil)."
+  def pergunta_aberta?(%{pergunta_aberta: aberta}), do: aberta == true
+
+  @doc """
+  Validadores das diretrizes que casam (campo opcional `valida`), no ctx do INICIO do turno: uma ferramenta que cubra o ultimo item no
+  meio do turno nao os desliga. Os globais (numero, afirmacao sem execucao, desligar, mudanca de horario) ficam em Trafego.Conversa.
+  """
+  def validadores(%{} = ctx), do: ctx |> casadas() |> Enum.flat_map(&Map.get(&1, :valida, []))
+
+  @doc "Ferramentas restritas: as que alguma diretriz declara em `oferece`. Fora disso so aparecem quando a diretriz casa."
+  def restritas, do: @diretrizes |> Enum.flat_map(&Map.get(&1, :oferece, [])) |> Enum.uniq()
+
+  @doc "Ferramentas restritas oferecidas neste contexto (diretrizes que casam)."
+  def oferecidas(%{} = ctx), do: ctx |> casadas() |> Enum.flat_map(&Map.get(&1, :oferece, [])) |> Enum.uniq()
+
+  @doc "Ferramentas restritas que NAO devem ser oferecidas ao modelo neste contexto."
+  def ocultas(%{} = ctx), do: restritas() -- oferecidas(ctx)
+
   @doc "Acoes das diretrizes que casam com o contexto, concatenadas."
-  def montar(%{} = ctx), do: @diretrizes |> Enum.filter(&casa?(&1, ctx)) |> Enum.map_join(& &1.acao)
+  def montar(%{} = ctx), do: ctx |> casadas() |> Enum.map_join(& &1.acao)
   def montar(tenant), do: tenant |> contexto() |> montar()
+
+  defp casadas(ctx), do: Enum.filter(@diretrizes, &casa?(&1, ctx))
 
   defp casa?(%{casa: :sempre}, _ctx), do: true
   defp casa?(%{casa: fun}, ctx) when is_function(fun, 1), do: fun.(ctx)

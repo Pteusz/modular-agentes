@@ -51,6 +51,9 @@ defmodule Trafego.Conversa do
       plano_id: plano_id,
       horario_inicial: Iara.perfil(tenant)["horario_estado"],
       campanha_perguntada: Iara.campanha_perguntada?(tenant),
+      pergunta_aberta: diretrizes.pergunta_aberta,
+      validadores: Diretrizes.validadores(diretrizes),
+      definicoes: Enum.reject(Ferramentas.definicoes(), &(&1["nome"] in Diretrizes.ocultas(diretrizes))),
       ocupado: ocupado?(tenant)
     }
 
@@ -77,7 +80,7 @@ defmodule Trafego.Conversa do
   defp laco(tenant, %{modelo: n} = st, ctx) when n >= @max_modelo, do: fallback(tenant, ctx, st)
 
   defp laco(tenant, st, ctx) do
-    entrada = %{"instrucao" => st.instrucao, "itens" => st.itens, "ferramentas" => Ferramentas.definicoes()}
+    entrada = %{"instrucao" => st.instrucao, "itens" => st.itens, "ferramentas" => st.definicoes}
     st = %{st | modelo: st.modelo + 1}
 
     case IA.turno(tenant, :media, entrada, st.plano_id) do
@@ -159,19 +162,27 @@ defmodule Trafego.Conversa do
   end
 
   # ---- validador de saida
+  # Globais sempre; os da apresentacao (`valida` da diretriz) so se ela casou no INICIO do turno (st.validadores). Ordem fixa.
+  @validadores ~w(numero_inventado afirma_sem_executar apresentacao_nao_dita sem_gancho frase_de_desligar fechamento_longo encerrou_longo)a
+  @globais ~w(numero_inventado afirma_sem_executar frase_de_desligar encerrou_longo)a
+
   defp validar(texto, st, ctx) do
     cond do
       texto == "" and ctx.entrega == nil -> {:erro, :vazio}
       texto == "" -> :ok
-      (n = numero_inventado(texto, st.permitido)) != nil -> {:erro, {:numero, n}}
-      (v = afirma_sem_executar(texto, ctx)) != nil -> {:erro, {:afirmacao, v}}
-      (i = apresentacao_nao_dita(texto, ctx)) != nil -> {:erro, {:apresentacao, i}}
-      sem_gancho?(texto, st, ctx) -> {:erro, :sem_gancho}
-      (f = frase_de_desligar(texto)) != nil -> {:erro, {:desligar, f}}
-      encerrou_longo?(texto, st, ctx) -> {:erro, :encerramento}
-      true -> :ok
+      true -> Enum.find_value(@validadores, :ok, fn v -> if v in @globais or v in st.validadores, do: rodar(v, texto, st, ctx) end)
     end
   end
+
+  defp rodar(:numero_inventado, texto, st, _ctx), do: if((n = numero_inventado(texto, st.permitido)) != nil, do: {:erro, {:numero, n}})
+  defp rodar(:afirma_sem_executar, texto, _st, ctx), do: if((v = afirma_sem_executar(texto, ctx)) != nil, do: {:erro, {:afirmacao, v}})
+  defp rodar(:apresentacao_nao_dita, texto, _st, ctx), do: if((i = apresentacao_nao_dita(texto, ctx)) != nil, do: {:erro, {:apresentacao, i}})
+  defp rodar(:sem_gancho, texto, st, ctx), do: if(sem_gancho?(texto, st, ctx), do: {:erro, :sem_gancho})
+  defp rodar(:frase_de_desligar, texto, _st, _ctx), do: if((f = frase_de_desligar(texto)) != nil, do: {:erro, {:desligar, f}})
+  defp rodar(:fechamento_longo, texto, st, ctx), do: if(lembrou_horario?(ctx) and fecha_apresentacao?(st, ctx) and String.length(texto) > 300, do: {:erro, :encerramento})
+
+  defp rodar(:encerrou_longo, texto, st, ctx),
+    do: if(lembrou_horario?(ctx) and not fecha_apresentacao?(st, ctx) and (String.contains?(texto, "?") or String.length(texto) > 200), do: {:erro, :encerramento})
 
   # o item registrado precisa aparecer no texto (o estado grava so o que foi realmente dito)
   defp apresentacao_nao_dita(texto, ctx) do
@@ -220,17 +231,10 @@ defmodule Trafego.Conversa do
     end
   end
 
-  # horario combinado e nada mais nesta mensagem: confirma em uma frase curta. No fechamento da apresentacao leva a pergunta de primeira
-  # campanha (ate 300 caracteres); numa mudanca de horario posterior (pergunta ja feita) fica sem "?" e curta.
-  defp encerrou_longo?(texto, st, ctx) do
-    lembrou = so_horario(ctx) and Enum.any?(ctx.efeitos, &(&1 == {:lembrou, "horario_atualizacao"}))
-
-    cond do
-      not lembrou -> false
-      fecha_apresentacao?(st, ctx) -> String.length(texto) > 300
-      true -> String.contains?(texto, "?") or String.length(texto) > 200
-    end
-  end
+  # horario combinado e nada mais nesta mensagem: confirma em uma frase curta. No fechamento da apresentacao (`fechamento_longo`, da
+  # diretriz :apresentacao) leva a pergunta de primeira campanha (ate 300 caracteres); numa mudanca de horario posterior (`encerrou_longo`,
+  # global; pergunta ja feita) fica sem "?" e curta.
+  defp lembrou_horario?(ctx), do: so_horario(ctx) and Enum.any?(ctx.efeitos, &(&1 == {:lembrou, "horario_atualizacao"}))
 
   defp aviso({:numero, n}), do: "o numero \"#{n}\" nao aparece em nenhum resultado de ferramenta, na mensagem do corretor nem na ficha."
   defp aviso({:afirmacao, v}), do: "voce afirmou \"#{v}\" mas nenhuma ferramenta executou isso nesta mensagem."
@@ -320,6 +324,8 @@ defmodule Trafego.Conversa do
   defp registrar_apresentacao(tenant, ctx, st) do
     for {:apresentou, item} <- ctx.efeitos, do: Iara.cobrir(tenant, item)
     if fecha_apresentacao?(st, ctx), do: Iara.marcar_campanha_perguntada(tenant)
+    # o corretor respondeu a pergunta aberta (marcador do INICIO do turno; o turno que a faz nao a fecha). Fallback nao passa por aqui.
+    if st.pergunta_aberta, do: Iara.fechar_pergunta(tenant)
 
     reperguntou = Enum.any?(ctx.efeitos, &(&1 == {:apresentou, "horario_perguntado"}))
 
