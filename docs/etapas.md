@@ -124,3 +124,8 @@ Teste geral passando, mix test das etapas anteriores passando, docs/estado.md e 
 - C: a ferramenta apresentacao so e oferecida quando a diretriz :apresentacao casa; combinar_horario fica sempre.
 - Sem chamada nova ao modelo, sem mudanca no contrato Nucleo.Automacao. etapa57 (a)/(b): assert da regra g antiga trocado por refute (marcador desligado).
 - Passo 3 (nao implementado): promover Diretrizes ao nucleo como callback opcional quando a automacao de redes sociais precisar.
+
+5.9 Laco de aprendizado, passo 1 (trafego 1.13.0)
+- STATUS: branch laco1; teste test/etapa59_test.exs. AGUARDA APROVACAO (sem push, merge, tag nem deploy).
+- O Monitor grava o desempenho real (classificacao + metricas) no Aprendizado: Aprendizado.registrar_desempenho/4, so inserts. UMA vez por mudanca conclusiva (meta_batida | desvio) e UMA no fechamento da janela (final: true, mesmo com metricas nil quando a leitura falhou). Nao muda nenhum comportamento do agente nem do Monitor; falha de gravacao vira evento resultado/erro_registro_desempenho.
+- Passo 2 (nao implementado): o adapter Meta so le insights em nivel de campanha (level campaign, sem impressoes); trazer nivel de anuncio e variantes de criativo no Plano.

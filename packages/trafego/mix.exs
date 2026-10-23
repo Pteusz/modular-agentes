@@ -1,6 +1,6 @@
 defmodule PTrafego.MixProject do
   use Mix.Project
-  @version "1.12.3"
+  @version "1.13.0"
 
   # Dev local (NUCLEO_LOCAL=1, posto pelo mix.exs da raiz): path. No cliente: git + sparse + tag, sem override.
   defp nucleo do
