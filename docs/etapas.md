@@ -112,3 +112,7 @@ Teste geral passando, mix test das etapas anteriores passando, docs/estado.md e 
 - Correcao 1 (feita): imovel nao tem status. Sai a regra esgotado/vendido -> evento + proposta de pausar + bloqueio de ativacao (trafego 1.4.1). Feed serve id, nome, bairro/regiao, dormitorios, valor, imagem, url, data; estado_obra so informativo.
 - Correcao 2 (feita; teste test/etapa46b_test.exs): dono e admin com tenant proprio (o do dono, `mateus`, e preservado e so ganha vinculos), WhatsApp/QR, plano + confirmacao e campanhas como o corretor, telas de corretor + atalhos, isolamento e privacidade, desativar/excluir e auditoria mantidos. gestao-equipe 1.1.0, painel-base 1.1.1.
 - Implantacao (depende de aprovacao): mix equipe.garantir EMAIL do dono; reiniciar o painel.
+
+5.7 Diretrizes da Iara, passo 1 (trafego 1.12.2)
+- STATUS: branch diretrizes; teste test/etapa57_test.exs. AGUARDA APROVACAO (sem push, merge, tag nem deploy).
+- A politica de conversa.ex virou lista de diretrizes (packages/trafego/lib/trafego/diretrizes.ex); casamento por estado em codigo, nenhuma chamada nova ao modelo. Com apresentacao pendente o texto e byte a byte o da politica antiga.
