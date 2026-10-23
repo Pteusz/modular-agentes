@@ -79,18 +79,18 @@ defmodule Etapa57Test do
     assert i =~ "EXEMPLOS DE TOM"
   end
 
-  test "(a) tenant novo (apresentacao pendente): bloco APRESENTACAO, regras f e g, regras 1 a 8 e exemplos de tom" do
+  test "(a) tenant novo (apresentacao pendente): bloco APRESENTACAO, regra f (sem a g: marcador desligado), regras 1 a 8 e exemplos de tom" do
     t = tenant_novo()
     roteiro([espia({:texto, "Oi!"})])
     dizer(t, "oi")
     i = instrucao()
     assert i =~ "APRESENTACAO (so enquanto"
     assert i =~ "Horario combinado"
-    assert i =~ "Depois dessa pergunta"
+    refute i =~ "acabou de perguntar"  # 1.12.3: a regra g so entra com a pergunta aberta (etapa58)
     tem_regras_e_tom(i)
   end
 
-  test "(b) apresentacao encerrada: sem bloco APRESENTACAO nem regra f; mantem g, regras 1 a 8 e exemplos de tom" do
+  test "(b) apresentacao encerrada: sem bloco APRESENTACAO nem regra f; sem a g (marcador desligado), regras 1 a 8 e exemplos de tom" do
     t = perguntado()
     Iara.definir_horario(t, "09:00")
     roteiro([espia({:texto, "Oi!"})])
@@ -98,7 +98,7 @@ defmodule Etapa57Test do
     i = instrucao()
     refute i =~ "APRESENTACAO (so enquanto"
     refute i =~ "Horario combinado"
-    assert i =~ "Depois dessa pergunta"
+    refute i =~ "acabou de perguntar"  # 1.12.3: a regra g so entra com a pergunta aberta (etapa58)
     assert i =~ "apresentacao encerrada: nao traga mais nada dela"
     tem_regras_e_tom(i)
   end
