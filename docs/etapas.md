@@ -129,3 +129,10 @@ Teste geral passando, mix test das etapas anteriores passando, docs/estado.md e 
 - STATUS: branch laco1; teste test/etapa59_test.exs. AGUARDA APROVACAO (sem push, merge, tag nem deploy).
 - O Monitor grava o desempenho real (classificacao + metricas) no Aprendizado: Aprendizado.registrar_desempenho/4, so inserts. UMA vez por mudanca conclusiva (meta_batida | desvio) e UMA no fechamento da janela (final: true, mesmo com metricas nil quando a leitura falhou). Nao muda nenhum comportamento do agente nem do Monitor; falha de gravacao vira evento resultado/erro_registro_desempenho.
 - Passo 2 (nao implementado): o adapter Meta so le insights em nivel de campanha (level campaign, sem impressoes); trazer nivel de anuncio e variantes de criativo no Plano.
+
+6.0 Re-pareamento do WhatsApp por QR (nucleo 1.7.0, painel-base 1.5.0)
+- STATUS: branch reparear-qr; teste test/etapa60_test.exs. AGUARDA APROVACAO (sem push, merge, tag nem deploy).
+- Problema: aparelho removido em Dispositivos vinculados = 401; o Amarula tenta de novo e desiste (:closed) sem gerar QR, e Desconectar mantem as credenciais.
+- Nucleo.Conexao.reparear/2: encerra o laco, move a pasta de credenciais do tenant para _backup/<tenant>-AAAAMMDD-HHMMSS (nunca apaga; so o tenant) e sobe o canal, que pede QR. Conta.reparear/2 audita whatsapp.reparear; a tela pede confirmacao antes (so no tenant da sessao).
+- Canal.Amarula: 401/403 (credencial_invalida?/1) publica :precisa_parear em Canal.Estado e faz o mesmo reparo, uma vez por canal; se o canal novo nao subir o estado fica :precisa_parear.
+- Nao implementado: detectar sessao conectada que deixou de receber mensagens (ocorreu apos restart do Postgres).

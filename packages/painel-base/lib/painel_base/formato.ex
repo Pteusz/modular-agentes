@@ -33,6 +33,7 @@ defmodule PainelBase.Formato do
   def canal(:conectando), do: {"Conectando…", "◌"}
   def canal({:qr, _}), do: {"Aguardando leitura do QR", "▣"}
   def canal(:conectado), do: {"Conectado", "✓"}
+  def canal(:precisa_parear), do: {"Precisa parear de novo", "!"}
   def canal(_), do: {"Desconectado", "✕"}
 
   @doc "SVG do QR a partir do texto que o canal publicou (a classe `qr` marca so este desenho)."

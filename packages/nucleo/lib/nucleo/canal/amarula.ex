@@ -5,12 +5,15 @@ defmodule Nucleo.Canal.Amarula do
   (o download fica com quem trata a midia); sem confirmacao de leitura; nao registra conteudo.
   Lista de permissao (1.5.1): a sala tem de ser a propria conta (consigo mesmo); grupos/broadcast/newsletter/terceiros nunca entram.
   O envio (`enviar_texto/audio`) vai sempre para a propria conta, nunca para destino vindo de mensagem.
+  Credencial recusada pelo WhatsApp (401/403, ex.: aparelho removido em Dispositivos vinculados): publica `:precisa_parear`, guarda as
+  credenciais num backup e reinicia o canal do tenant (`Nucleo.Conexao.reparear/2`) para gerar QR novo, em vez de insistir ate desistir.
   O QR e o estado da conexao vao para `Nucleo.Canal.Estado` (so memoria); o QR so e impresso no terminal com `imprimir_qr: true` (padrao do pareamento manual).
   """
   @behaviour Nucleo.Canal
   use GenServer
   require Logger
   alias Nucleo.Canal.Estado
+  alias Nucleo.Conexao
 
   @raiz_padrao "/opt/modular-agentes-data/amarula"
 
@@ -59,6 +62,10 @@ defmodule Nucleo.Canal.Amarula do
     _, _ -> []
   end
 
+  @doc "O erro de conexao do Amarula e credencial recusada (401 = deslogado, 403 = banido/invalido)?"
+  def credencial_invalida?({:connection_failure, motivo}) when motivo in ["401", "403"], do: true
+  def credencial_invalida?(_), do: false
+
   @impl Nucleo.Canal
   def iniciar(tenant, destino, opts), do: GenServer.start_link(__MODULE__, {tenant, destino, opts})
   @impl Nucleo.Canal
@@ -82,7 +89,16 @@ defmodule Nucleo.Canal.Amarula do
       })
       |> Amarula.connect(parent_pid: self())
 
-    {:ok, %{conn: conn, destino: destino, tenant: tenant, aberto: false, imprimir: Keyword.get(opts, :imprimir_qr, true)}}
+    {:ok,
+     %{
+       conn: conn,
+       destino: destino,
+       tenant: tenant,
+       aberto: false,
+       imprimir: Keyword.get(opts, :imprimir_qr, true),
+       reparo: [canal_opts: opts],
+       reparando: false
+     }}
   end
 
   # numero realmente pareado (para a gestao conferir com o cadastrado); nunca derruba o canal
@@ -159,6 +175,26 @@ defmodule Nucleo.Canal.Amarula do
     end
 
     {:noreply, s}
+  end
+
+  # 401/403: o laco (e este canal) e derrubado pela tarefa, entao ela roda solta; uma vez so, as retentativas seguintes caem no fim
+  def handle_info({:amarula, :error, erro}, %{reparando: false} = s) do
+    if credencial_invalida?(erro) do
+      Logger.warning("canal: credenciais recusadas (#{elem(erro, 1)}), pareando de novo tenant=#{s.tenant}")
+      Estado.publicar(s.tenant, :precisa_parear)
+      {tenant, reparo} = {s.tenant, s.reparo}
+
+      Task.start(fn ->
+        case Conexao.reparear(tenant, reparo) do
+          {:error, _} -> Estado.publicar(tenant, :precisa_parear)
+          _ -> :ok
+        end
+      end)
+
+      {:noreply, %{s | reparando: true, aberto: false}}
+    else
+      {:noreply, s}
+    end
   end
 
   def handle_info(_, s), do: {:noreply, s}
