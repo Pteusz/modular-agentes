@@ -172,7 +172,7 @@ defmodule PainelBase.ContaLive do
 
     {:ok,
      socket
-     |> assign(ativo: :conta, anuncios: Fonte.conta(t), aviso: @avisos[params["aviso"]], erro: @erros[params["erro"]], erro_whatsapp: nil)
+     |> assign(ativo: :conta, anuncios: Fonte.conta(t), aviso: @avisos[params["aviso"]], erro: @erros[params["erro"]], erro_whatsapp: nil, confirmando_reparear: false)
      |> estado(Conexao.estado(t))}
   end
 
@@ -185,6 +185,16 @@ defmodule PainelBase.ContaLive do
 
   def handle_event("conectar", _, socket), do: {:noreply, resultado(socket, Conta.conectar(socket.assigns.usuario))}
   def handle_event("reconectar", _, socket), do: {:noreply, resultado(socket, Conta.reconectar(socket.assigns.usuario))}
+
+  # parear de novo desfaz o pareamento atual: so executa depois do pedido e da confirmacao, sempre no tenant da sessao
+  def handle_event("pedir_reparear", _, socket), do: {:noreply, assign(socket, confirmando_reparear: true)}
+  def handle_event("cancelar_reparear", _, socket), do: {:noreply, assign(socket, confirmando_reparear: false)}
+
+  def handle_event("reparear", _, %{assigns: %{confirmando_reparear: true}} = socket) do
+    {:noreply, socket |> assign(confirmando_reparear: false) |> then(&resultado(&1, Conta.reparear(&1.assigns.usuario)))}
+  end
+
+  def handle_event("reparear", _, socket), do: {:noreply, socket}
 
   def handle_event("desconectar", _, socket) do
     Conta.desconectar(socket.assigns.usuario)
@@ -225,6 +235,12 @@ defmodule PainelBase.ContaLive do
       <button :if={@canal == :sem_sessao} type="button" class="botao" phx-click="conectar">Conectar WhatsApp</button>
       <button :if={@canal == :desconectado} type="button" class="botao" phx-click="reconectar">Reconectar</button>
       <button :if={@canal != :sem_sessao} type="button" class="botao secundario" phx-click="desconectar">Desconectar</button>
+      <button :if={!@confirmando_reparear} type="button" class="botao secundario" phx-click="pedir_reparear">Parear de novo (QR)</button>
+      <div :if={@confirmando_reparear} class="aviso" role="alertdialog">
+        <p>Isso desfaz o pareamento atual e pede um QR novo; as credenciais antigas ficam guardadas num backup. Continuar?</p>
+        <button type="button" class="botao" phx-click="reparear">Sim, parear de novo</button>
+        <button type="button" class="botao secundario" phx-click="cancelar_reparear">Cancelar</button>
+      </div>
     </section>
     <section class="cartao">
       <h2>Conta de anúncios</h2>

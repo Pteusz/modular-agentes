@@ -1,6 +1,6 @@
 defmodule PainelBase.Conta do
   @moduledoc """
-  Acoes da tela Conta, sempre sobre o TENANT da sessao (nunca um id vindo da pagina): WhatsApp por QR (conectar, desconectar, reconectar)
+  Acoes da tela Conta, sempre sobre o TENANT da sessao (nunca um id vindo da pagina): WhatsApp por QR (conectar, desconectar, reconectar, parear de novo)
   e cadastro manual da conta de anuncios. A credencial e validada de formato aqui, validada na plataforma e guardada CIFRADA pela fonte
   (Fonte -> Trafego, AES-256-GCM, chave so em env); nunca volta para a tela (so mascarada). A auditoria guarda quem, quando e so NOMES de campos.
   """
@@ -37,6 +37,17 @@ defmodule PainelBase.Conta do
       {:ok, _} -> auditar(usuario, "whatsapp.reconectar")
       {:ok, :ja_conectado, _} -> :ok
       {:error, e} -> {:error, e}
+    end
+  end
+
+  @doc """
+  Parear de novo (aparelho removido no celular): derruba a sessao, MOVE as credenciais para um backup datado (nunca apaga) e sobe o canal
+  pedindo QR. So o tenant da sessao. Quem chama confirma com a pessoa antes (tela).
+  """
+  def reparear(usuario, opts \\ []) do
+    case Conexao.reparear(usuario.tenant_id, opts) do
+      {:error, e} -> {:error, e}
+      _ -> auditar(usuario, "whatsapp.reparear")
     end
   end
 

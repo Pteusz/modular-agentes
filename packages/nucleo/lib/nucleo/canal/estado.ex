@@ -1,6 +1,7 @@
 defmodule Nucleo.Canal.Estado do
   @moduledoc """
-  Estado da conexao do canal por tenant (para telas): :sem_sessao | :conectando | {:qr, texto} | :conectado | :desconectado.
+  Estado da conexao do canal por tenant (para telas): :sem_sessao | :conectando | {:qr, texto} | :conectado | :desconectado | :precisa_parear
+  (credenciais recusadas, 401/403: o aparelho foi removido no celular; some quando o QR novo chega).
   Guardado so em memoria (o QR e segredo de pareamento: nunca vai para evento nem log). Quem quiser acompanhar chama
   `assinar/1` e recebe `{:canal_estado, tenant, estado}`.
   """
