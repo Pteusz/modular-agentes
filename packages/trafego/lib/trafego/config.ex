@@ -47,14 +47,6 @@ defmodule Trafego.Config do
   @doc "Teto mensal de custo de IA por corretor, em R$ (aviso a 80%, bloqueio a 100%). Padrao R$ 50; env TRAFEGO_TETO_IA_BRL."
   def teto_ia_brl, do: numero(Application.get_env(:trafego, :teto_ia_brl) || System.get_env("TRAFEGO_TETO_IA_BRL")) || 50.0
 
-  @doc "Teto total maximo de um plano nesta instalacao, em centavos. Padrao R$ 5.000; env TRAFEGO_TETO_MAX_BRL (em R$)."
-  def teto_max_centavos do
-    case Application.get_env(:trafego, :teto_max_centavos) do
-      n when is_integer(n) and n > 0 -> n
-      _ -> if(v = numero(System.get_env("TRAFEGO_TETO_MAX_BRL")), do: round(v * 100), else: 500_000)
-    end
-  end
-
   @doc "Janela padrao sugerida pela Iara (dias a partir de hoje). Padrao 30."
   def janela_padrao_dias, do: Application.get_env(:trafego, :janela_padrao_dias, 30)
 

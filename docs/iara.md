@@ -49,7 +49,7 @@ Ela pode mudar algo no plano se achar mais coerente, explicando o motivo e pedin
 Regras do anuncio (imovel = categoria HOUSING): sem promessa de rentabilidade, "garantido" ou discriminacao; a Iara reescreve antes de propor.
 
 ### Validacao do plano (novo)
-Antes de pedir confirmacao, a Iara VALIDA o plano e mostra o resultado: (a) exigencias do destino atendidas (A2); (b) criativo aprovado pelo verificador; (c) orcamento dentro do teto (teto_total <= TRAFEGO_TETO_MAX_BRL) e coerente com a meta (ex.: custo por resultado alcancavel com o orcamento, usando o aprendizado); (d) copy e publico dentro das regras HOUSING; (e) janela valida. Plano com problema nao vai a confirmacao: ela diz o que ajustar e propoe a correcao. So plano validado e confirmado e criado (PAUSADO).
+Antes de pedir confirmacao, a Iara VALIDA o plano e mostra o resultado: (a) exigencias do destino atendidas (A2); (b) criativo aprovado pelo verificador; (c) teto_total maior que a verba diaria (o teto e sempre o que o corretor definiu; a Iara nunca o altera nem impoe limite) e coerente com a meta (ex.: custo por resultado alcancavel com o orcamento, usando o aprendizado); (d) copy e publico dentro das regras HOUSING; (e) janela valida. Plano com problema nao vai a confirmacao: ela diz o que ajustar e propoe a correcao. So plano validado e confirmado e criado (PAUSADO).
 
 ## 4. Acompanhamento da campanha (ciclo diario)
 - Com a campanha ativa, a Iara atualiza o corretor TODO DIA, no horario que ele escolheu: como esta contra o plano e a meta (esperado ou nao), em poucas linhas.

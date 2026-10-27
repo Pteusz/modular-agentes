@@ -11,7 +11,7 @@ defmodule Etapa46Test do
 
   @pedido "pedido destino site; url https://corretor.com.br/lancamento; pixel 998877; publico casais 30-45 zona sul; " <>
             "criativo foto1.jpg | Apartamento novo na zona sul; diario R$ 50; teto R$ 500; janela #{Date.utc_today()} #{Date.add(Date.utc_today(), 30)}; meta 20; custo_max R$ 15"
-  @chaves ~w(cotacao_usd_brl teto_ia_brl teto_max_centavos notificar cotacao_fonte feed_fonte)a
+  @chaves ~w(cotacao_usd_brl teto_ia_brl notificar cotacao_fonte feed_fonte)a
 
   setup_all do
     Registro.migrar!()

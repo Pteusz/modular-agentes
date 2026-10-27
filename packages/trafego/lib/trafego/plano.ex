@@ -114,10 +114,8 @@ defmodule Trafego.Plano do
   defp invalidos(p) do
     d = p["orcamento_diario"]
     t = p["teto_total"]
-    maximo = Trafego.Config.teto_max_centavos()
 
     (if is_integer(d) and is_integer(t) and t < d, do: ["teto_menor_que_diario"], else: []) ++
-      (if is_integer(t) and t > maximo, do: ["teto_acima_do_maximo"], else: []) ++
       (case {Date.from_iso8601(get_in(p, ["janela", "inicio"]) || ""), Date.from_iso8601(get_in(p, ["janela", "fim"]) || "")} do
          {{:ok, i}, {:ok, f}} -> if Date.compare(f, i) == :lt, do: ["janela_invalida"], else: []
          {{:ok, _}, _} -> ["janela_invalida"]
@@ -139,9 +137,40 @@ defmodule Trafego.Plano do
     end
   end
 
+  @nome_max 60
+  @rotulos_destino %{"whatsapp" => "WhatsApp", "site" => "Site", "formulario" => "Formulário"}
+
+  @doc "Nome da campanha na plataforma: \"<imovel> · <destino>\". O imovel e dado do corretor: sem controle, espacos colapsados, ate #{@nome_max} caracteres (corta em palavra). Sem imovel: \"Campanha · <destino> <id do plano>\"."
+  def nome_campanha(p) do
+    destino = rotulo_destino(p["destino"])
+
+    case limpar_nome(p["imovel"]) do
+      "" -> "Campanha · #{destino} #{p["id"]}"
+      imovel -> "#{imovel} · #{destino}"
+    end
+  end
+
+  defp rotulo_destino(d), do: Map.get(@rotulos_destino, d) || String.capitalize(to_string(d))
+
+  defp limpar_nome(v) when is_binary(v) do
+    limpo = v |> String.replace(~r/[[:cntrl:]\s]+/u, " ") |> String.trim()
+
+    if String.length(limpo) <= @nome_max do
+      limpo
+    else
+      corte = String.slice(limpo, 0, @nome_max)
+
+      if String.at(limpo, @nome_max) == " " or not String.contains?(corte, " "),
+        do: String.trim(corte),
+        else: corte |> String.replace(~r/\s+\S*$/u, "") |> String.trim()
+    end
+  end
+
+  defp limpar_nome(_), do: ""
+
   def params_campanha(p),
     do: %{
-      "nome" => "Plano #{p["id"]}: #{p["destino"]}", "objetivo" => p["resultado"], "destino" => p["destino"],
+      "nome" => nome_campanha(p), "objetivo" => p["resultado"], "destino" => p["destino"],
       "orcamento_diario" => p["orcamento_diario"], "teto_total" => p["teto_total"], "janela" => p["janela"],
       "publico" => p["publico"], "criativo" => p["criativo"],
       "url" => p["url"], "url_final" => p["url_final"], "pixel" => p["pixel"], "numero" => p["numero"], "formulario" => p["formulario"]

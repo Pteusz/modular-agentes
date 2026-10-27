@@ -166,7 +166,7 @@ Sem ordem de perguntas, sem lista de campos, sem textos prontos de erro. O limit
 | Efeito so com "sim" (exceto pausar) | `Gancho.alterar` (ja) | Ferramentas de efeito criam proposta; a instancia nao tem acesso a `Executor`/`Ativacao.executar`. |
 | Pausar com motivo | esquema da ferramenta + anexo em codigo | `motivo` obrigatorio; texto "Pausei X porque ..." garantido pelo codigo; evento. |
 | Atenuacao (filho <= pai) | resolvedor de procedimentos | Interseccao de ferramentas; teste automatico para todo procedimento declarado. |
-| Verba/teto | validacao na ferramenta e de novo no `Gancho`/`Ativacao` | `teto_max_centavos`, teto >= diario, janela valida. |
+| Verba/teto | validacao na ferramenta e de novo no `Gancho`/`Ativacao` | teto >= diario (o teto e o do corretor, sem maximo da instalacao), janela valida. |
 | Conta Meta | `Acesso` | Nenhuma ferramenta recebe `conta_id`. |
 | Nunca inventar numero | **validador de saida** | Todo numero (>= 2 digitos ou "R$") do texto final precisa existir em resultado de ferramenta do turno, na mensagem do corretor ou na ficha. Senao: 1 correcao ao modelo; persistindo, fallback. Generaliza `Iara.valores_mantidos?`. |
 | Nunca dizer que fez o que nao fez | validador | Verbos de efeito ("pausei", "ativei", "criei", "alterei") exigem o evento correspondente no turno. |

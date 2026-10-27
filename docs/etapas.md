@@ -136,3 +136,10 @@ Teste geral passando, mix test das etapas anteriores passando, docs/estado.md e 
 - Nucleo.Conexao.reparear/2: encerra o laco, move a pasta de credenciais do tenant para _backup/<tenant>-AAAAMMDD-HHMMSS (nunca apaga; so o tenant) e sobe o canal, que pede QR. Conta.reparear/2 audita whatsapp.reparear; a tela pede confirmacao antes (so no tenant da sessao).
 - Canal.Amarula: 401/403 (credencial_invalida?/1) publica :precisa_parear em Canal.Estado e faz o mesmo reparo, uma vez por canal; se o canal novo nao subir o estado fica :precisa_parear.
 - Nao implementado: detectar sessao conectada que deixou de receber mensagens (ocorreu apos restart do Postgres).
+
+6.1 Teto livre, ajuste por WhatsApp e nome da campanha (trafego 1.14.0)
+- STATUS: branch etapa-teto-livre; teste test/etapa61_test.exs. AGUARDA APROVACAO (sem push, merge, tag nem deploy).
+- A: sem teto maximo da instalacao. Removidos Config.teto_max_centavos (e TRAFEGO_TETO_MAX_BRL), teto_acima_do_maximo (pendencia, pre-condicao da ativacao, pergunta), o limite no fechamento do plano e o campo teto_maximo_por_campanha. O teto do corretor chega intacto a Meta (spend_cap); sem teto dito, a sugestao e diario x dias da janela. Ficam teto positivo e teto_menor_que_diario. teto_ia_brl (custo da IA) nao muda.
+- B: nome da campanha nova = "<Imovel> · <destino>" (WhatsApp, Site, Formulário) por Plano.nome_campanha; imovel limpo como dado (sem controle, espacos colapsados, ate 60 caracteres, corte em palavra); sem imovel "Campanha · <destino> <id do plano>". Campanhas existentes nao sao renomeadas.
+- C: ferramenta de acao propor_ajuste (ref, verba_diaria e/ou teto_total em reais). So abre a Proposta (tipo ajustar, mostra antes → depois); executa depois do sim pelo Gancho/Ativacao: rele a campanha (ativa ou pausada), revalida (teto > verba), edita so os campos pedidos, le de volta e confere, atualiza o plano ligado sem mudar o status e registra o Evento. Valor exatamente o dito pelo corretor; uma acao por mensagem.
+- Nao testado contra a Meta real (so a Simulada): daily_budget/spend_cap em campanha ATIVA e o caractere "·" no nome.

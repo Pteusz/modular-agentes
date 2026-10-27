@@ -46,7 +46,7 @@ defmodule Etapa51Test do
 
   @pedido "pedido destino site; url https://corretor.com.br/lancamento; pixel 998877; publico casais 30-45 zona sul; " <>
             "criativo foto1.jpg | Apartamento novo na zona sul; diario R$ 50; teto R$ 500; janela #{Date.utc_today()} #{Date.add(Date.utc_today(), 30)}; meta 20; custo_max R$ 15"
-  @chaves ~w(cotacao_usd_brl teto_ia_brl teto_max_centavos preco_brl_por_mil preco_usd_por_milhao notificar baixar_midia midia_dir audio openai provedor_ia)a
+  @chaves ~w(cotacao_usd_brl teto_ia_brl preco_brl_por_mil preco_usd_por_milhao notificar baixar_midia midia_dir audio openai provedor_ia)a
 
   setup_all do
     Registro.migrar!()
@@ -217,7 +217,7 @@ defmodule Etapa51Test do
     assert r =~ "Voce confirma?"
     # valores invalidos mantem o codigo no texto (significado do erro)
     u = tenant_pronto()
-    assert dizer(u, String.replace(@pedido, "teto R$ 500", "teto R$ 999999999")) =~ "passou do maximo"
+    assert dizer(u, String.replace(@pedido, "teto R$ 500", "teto R$ 10")) =~ "maior que a verba diaria"
   end
 
   test "primeiro contato: \"oi\" = UMA mensagem curta de apresentacao (sem pergunta de horario junto) e nunca se apresenta de novo" do
