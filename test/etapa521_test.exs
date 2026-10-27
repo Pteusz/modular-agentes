@@ -188,7 +188,7 @@ defmodule Etapa521Test do
   test "ambiguidade: mensagem curta, separada das perguntas e sem repetir o cabecalho" do
     {t, _} = tenant_pronto()
     # (5.2.2) uma fala so: a duvida e o que falta
-    [amb] = dizer(t, "pedido objetivo vender; imovel Torre Sul; ambiguidade R$ 500 pode ser por dia ou no total")
+    [amb] = dizer(t, "pedido objetivo vender; imovel Torre Sul; destino whatsapp; ambiguidade R$ 500 pode ser por dia ou no total")
     assert amb =~ "Fiquei na duvida" and amb =~ "Me confirma?" and amb =~ "1. "
     refute amb =~ "Pra montar o plano"
     assert curtas([amb]) == []

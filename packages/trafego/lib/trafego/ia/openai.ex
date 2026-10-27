@@ -279,6 +279,7 @@ defmodule Trafego.IA.OpenAI do
     Voce monta o PLANO de uma campanha de anuncios de um corretor de imoveis, a partir do pedido dele (portugues informal).
     Preencha so o que o corretor disse ou o plano atual ja tem; o que nao foi dito fica nulo. Nunca invente valores.
     Dinheiro em CENTAVOS de real (R$ 50 = 5000). destino: site (precisa url e pixel), whatsapp (precisa numero) ou formulario (precisa formulario).
+    destino SO se o corretor disse o tipo de campanha (formulario, WhatsApp ou site); nunca deduza de url ou numero e nunca escolha por ele: "tanto faz" ou "o que achar melhor" deixam destino nulo.
     criativo.midia so pode ser o arquivo ja recebido (campo criativo_recebido); se nao ha arquivo, deixe nulo. criativo.texto e o texto do anuncio.
     janela em datas AAAA-MM-DD (use "hoje" para datas relativas). meta: resultados desejados e custo_max por resultado (centavos).
     Nao existe conta de anuncio no plano: nao pergunte nem informe ids de conta. A campanha sera criada PAUSADA.

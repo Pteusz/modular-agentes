@@ -8,7 +8,7 @@ defmodule Trafego.Ficha do
     * "origem": campo => "corretor" | "iara" (o que a Iara sugeriu aparece como "sugestao minha"; a IA so sugere onde o corretor nao disse)
     * "perguntados": campos do nucleo ja perguntados (o teto perguntado e nao respondido vira SUGESTAO: diario x dias da janela)
 
-  Nucleo (a unica coisa que pode ser perguntada): objetivo, imovel, verba diaria e teto, mais o que o destino exige (numero, url...).
+  Nucleo (a unica coisa que pode ser perguntada): tipo de campanha (destino, perguntado ANTES de tudo, sem assumir), imovel, verba diaria e teto, mais o que o destino exige (numero, url...).
   O resto sai de padroes sensatos (`completar/2`). A entrega do plano sao 4 a 5 mensagens curtas (`mensagens/1`).
   """
   alias Trafego.{Config, Feed, Plano}
@@ -169,7 +169,8 @@ defmodule Trafego.Ficha do
   def avaliar(tenant, plano) do
     plano = renormalizar(plano)
     base = completar(plano, tenant)
-    itens = nucleo(plano) ++ extras(base)
+    # o tipo de campanha (destino) vem antes de tudo: sem ele pergunta SO o tipo; o resto fica guardado no rascunho
+    itens = if presente?(plano["destino"]), do: nucleo(plano) ++ extras(base), else: ["destino"]
 
     if itens == [], do: {:pronto, base}, else: {:pergunta, plano, itens}
   end
@@ -193,11 +194,24 @@ defmodule Trafego.Ficha do
   def perguntas(itens, repetida \\ false, plano \\ %{}, depois_de_duvida \\ false) do
     intro =
       cond do
+        itens == ["destino"] -> nil
         depois_de_duvida -> "Alem disso, me conta:"
         repetida -> "Ainda preciso de:"
         true -> "Pra montar o plano me conta:"
       end
 
+    if intro == nil, do: pergunta_tipo(repetida), else: lista(intro, itens, plano)
+  end
+
+  # tipo de campanha: frase unica, sem lista; se ele nao decidiu, explica a diferenca e pergunta de novo (nunca escolhe por ele)
+  defp pergunta_tipo(false), do: "Que tipo de campanha voce quer fazer: com formulario, levando pro WhatsApp ou levando pro site?"
+
+  defp pergunta_tipo(true),
+    do:
+      "Sem problema. No formulario a pessoa deixa os dados no proprio anuncio, no WhatsApp ela chama voce direto na conversa e " <>
+        "no site ela cai na pagina do imovel. Qual dos tres voce quer?"
+
+  defp lista(intro, itens, plano) do
     lista = itens |> Enum.with_index(1) |> Enum.map_join("\n", fn {i, n} -> "#{n}. #{pedido(i, plano)}" end)
     intro <> "\n" <> lista <> "\nPode mandar tudo junto, por texto ou audio."
   end
@@ -215,6 +229,7 @@ defmodule Trafego.Ficha do
 
   def pedido(item, _plano), do: pedido(item)
 
+  def pedido("destino"), do: "o tipo de campanha (formulario, WhatsApp ou site)"
   def pedido("objetivo"), do: "o que quer com o anuncio (vender, gerar contatos...)"
   def pedido("imovel"), do: "qual imovel vai anunciar"
   def pedido("orcamento_diario"), do: "quanto quer gastar por dia (em R$)"
@@ -239,15 +254,8 @@ defmodule Trafego.Ficha do
     |> meta()
   end
 
+  # o destino so entra se o corretor disse (a pergunta do tipo vem antes de tudo; nunca e assumido)
   defp destino(p, tenant) do
-    p =
-      if presente?(p["destino"]) do
-        p
-      else
-        d = if presente?(p["url"]), do: "site", else: "whatsapp"
-        p |> Map.put("destino", d) |> Map.put("resultado", resultado(d)) |> marcar("destino", "iara")
-      end
-
     f = ficha(p)
 
     if p["destino"] == "whatsapp" and not presente?(p["numero"]) and f["sem_numero"] != true and not is_binary(f["numero_sem_ddd"]) and
@@ -260,10 +268,6 @@ defmodule Trafego.Ficha do
       p
     end
   end
-
-  defp resultado("site"), do: "evento_pixel"
-  defp resultado("whatsapp"), do: "conversa_iniciada"
-  defp resultado(_), do: "lead"
 
   defp janela(p) do
     if presente?(get_in(p, ["janela", "inicio"])) and presente?(get_in(p, ["janela", "fim"])) do
