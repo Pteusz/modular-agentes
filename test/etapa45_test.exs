@@ -13,7 +13,7 @@ defmodule Etapa45Test do
   @pedido "pedido destino site; url https://corretor.com.br/lancamento; pixel 998877; publico casais 30-45 zona sul; " <>
             "criativo foto1.jpg | Apartamento novo na zona sul; diario R$ 50; teto R$ 500; janela #{Date.utc_today()} #{Date.add(Date.utc_today(), 30)}; meta 20; custo_max R$ 15"
 
-  @chaves ~w(cotacao_usd_brl teto_ia_brl teto_max_centavos preco_brl_por_mil notificar cotacao_fonte feed_fonte ptax_base_url relatorio_horas preco_usd_por_milhao)a
+  @chaves ~w(cotacao_usd_brl teto_ia_brl preco_brl_por_mil notificar cotacao_fonte feed_fonte ptax_base_url relatorio_horas preco_usd_por_milhao)a
 
   setup_all do
     Registro.migrar!()
@@ -121,14 +121,12 @@ defmodule Etapa45Test do
     for trecho <- ["Perfeito", "talvez", "cancela"], do: refute(todo =~ trecho)
   end
 
-  test "teto total acima do maximo da instalacao nao confirma o plano" do
-    Application.put_env(:trafego, :teto_max_centavos, 30_000)
-    on_exit(fn -> Application.delete_env(:trafego, :teto_max_centavos) end)
+  test "teto alto dito pelo corretor nao e barrado: o plano pede confirmacao e nada e criado antes do sim" do
     t = "tp5_#{System.unique_integer([:positive])}"
     conta = vincular(t)
-    r = resp(Agente.processar(t, @pedido))
-    assert r =~ "passou do maximo"
-    assert %{"status" => "rascunho"} = Plano.atual(t)
+    r = resp(Agente.processar(t, String.replace(@pedido, "teto R$ 500", "teto R$ 20000")))
+    assert r =~ "confirma" and not (r =~ "maximo")
+    assert %{"status" => "aguardando_confirmacao", "teto_total" => 2_000_000} = Plano.atual(t)
     assert Simulada.todas() |> Enum.filter(&(&1["conta_id"] == conta)) == []
   end
 

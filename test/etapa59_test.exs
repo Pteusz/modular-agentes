@@ -232,6 +232,6 @@ defmodule Etapa59Test do
   end
 
   test "versao" do
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.13.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.14.0"
   end
 end

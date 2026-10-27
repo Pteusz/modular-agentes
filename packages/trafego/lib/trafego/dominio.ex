@@ -1,12 +1,12 @@
 defmodule Trafego.Proposta do
   @moduledoc """
-  Proposta de alteracao (ativar | pausar) sobre um plano. Regra da 4.5: relatar e autonomo, alterar nao: toda mudanca na
+  Proposta de alteracao (ativar | pausar | ajustar) sobre um plano (ajustar: verba/teto de uma campanha, com ou sem plano). Regra da 4.5: relatar e autonomo, alterar nao: toda mudanca na
   campanha e uma proposta que o corretor confirma em texto livre. Guardada no registro do tenant em "proposta:<id>".
   Status: aguardando_confirmacao | confirmado | executada | recusada | falhou. A confirmacao vale para a proposta aberta mais recente.
   """
   alias Nucleo.Registro
 
-  def criar(tenant, tipo, plano_id, extra \\ %{}) when tipo in ["ativar", "pausar"] do
+  def criar(tenant, tipo, plano_id, extra \\ %{}) when tipo in ["ativar", "pausar", "ajustar"] do
     n = ((Registro.ler(tenant, "proposta_seq") || %{})["n"] || 0) + 1
     Registro.gravar(tenant, "proposta_seq", %{"n" => n})
     salvar(tenant, Map.merge(%{"id" => "q#{n}", "tipo" => tipo, "plano_id" => plano_id, "status" => "aguardando_confirmacao"}, extra))
@@ -32,14 +32,13 @@ end
 defmodule Trafego.Ativacao do
   @moduledoc """
   Ativar e pausar campanha, SO a partir de proposta confirmada (passa pelo gancho do dominio). Antes de propor e de novo antes
-  de executar, as pre-condicoes decidiveis: plano verificado, teto do plano dentro do maximo da instalacao, janela nao encerrada,
+  de executar, as pre-condicoes decidiveis: plano verificado, janela nao encerrada,
   credencial ok, campanha realmente PAUSADA na plataforma. Depois de ativar, le a campanha de volta e confere.
   """
   alias Trafego.{Acesso, Evento, Executor, Gancho, Plano, Proposta}
 
   @motivos %{
     "plano_nao_verificado" => "o plano ainda nao foi criado e verificado",
-    "teto_acima_do_maximo" => "o teto total do plano passa do maximo permitido nesta instalacao",
     "janela_encerrada" => "a janela do plano ja acabou",
     "credencial_invalida" => "o acesso a plataforma esta invalido",
     "campanha_nao_esta_pausada" => "a campanha nao esta pausada na plataforma",
@@ -54,7 +53,6 @@ defmodule Trafego.Ativacao do
     Enum.reject(
       [
         plano["status"] not in ["verificado", "pausada"] && "plano_nao_verificado",
-        "teto_acima_do_maximo" in Plano.pendencias(plano) && "teto_acima_do_maximo",
         janela_encerrada?(plano, hoje) && "janela_encerrada",
         Acesso.status(tenant) != "ok" && "credencial_invalida",
         (case lido do
@@ -90,14 +88,28 @@ defmodule Trafego.Ativacao do
     "Vou PAUSAR a campanha #{plano["campanha_id"]} do plano #{plano["id"]} porque #{motivo}. Pausar nao apaga nada e da para ativar de novo depois. Proposta #{prop["id"]}. Voce confirma?"
   end
 
+  def texto(%{"tipo" => "ajustar"} = prop, _plano) do
+    "Vou ajustar a campanha #{prop["campanha_nome"]}: #{mudancas(prop)}. Proposta #{prop["id"]}. Voce confirma?"
+  end
+
+  # "antes → depois" so do que muda; o valor e o que o corretor disse
+  defp mudancas(prop) do
+    [
+      prop["verba_diaria"] && "verba diaria #{Plano.brl(prop["verba_antes"])} → #{Plano.brl(prop["verba_diaria"])}",
+      prop["teto_total"] && "teto total #{Plano.brl(prop["teto_antes"])} → #{Plano.brl(prop["teto_total"])}"
+    ]
+    |> Enum.filter(& &1)
+    |> Enum.join("; ")
+  end
+
   @doc "Executa a proposta CONFIRMADA. {:ok, texto} | {:error, :sem_confirmacao} | {:error, motivo}"
   def executar(tenant, prop_id) do
     prop = Proposta.ler(tenant, prop_id)
-    acao = if prop["tipo"] == "ativar", do: :ativar_campanha, else: :pausar_campanha
+    acao = %{"ativar" => :ativar_campanha, "ajustar" => :editar_campanha}[prop["tipo"]] || :pausar_campanha
 
     case Gancho.alterar(tenant, prop, {acao, %{"proposta_id" => prop_id}}) do
       {:bloquear, _} -> {:error, :sem_confirmacao}
-      :ok -> rodar(tenant, prop, Plano.ler(tenant, prop["plano_id"]))
+      :ok -> rodar(tenant, prop, prop["plano_id"] && Plano.ler(tenant, prop["plano_id"]))
     end
   end
 
@@ -169,6 +181,46 @@ defmodule Trafego.Ativacao do
         falhou(tenant, prop, plano, (case other do {:error, e} -> Executor.motivo(e); _ -> "pausa_nao_confere" end))
         {:ok, "Nao consegui confirmar a pausa da campanha #{cid}. Confira no Gerenciador de Anuncios; registrei o erro."}
     end
+  end
+
+  # ajuste de verba/teto: relê a campanha, revalida, edita so o que foi dito e confere lendo de volta; o status da campanha nao muda
+  defp rodar(tenant, %{"tipo" => "ajustar"} = prop, plano) do
+    cid = prop["campanha_id"]
+    attrs = Map.reject(%{"orcamento_diario" => prop["verba_diaria"], "teto_total" => prop["teto_total"]}, fn {_, v} -> is_nil(v) end)
+
+    with {:ok, %{"status" => st} = atual} when st in ["ATIVA", "PAUSADA"] <- Acesso.chamar(tenant, :ler_campanha, [cid]),
+         :ok <- ajuste_coerente(atual, attrs),
+         {:ok, _} <- Acesso.chamar(tenant, :editar_campanha, [cid, attrs]),
+         {:ok, depois} <- Acesso.chamar(tenant, :ler_campanha, [cid]),
+         true <- Enum.all?(attrs, fn {k, v} -> depois[k] == v end) do
+      if plano, do: Plano.salvar(tenant, Map.merge(plano, attrs))
+      fechar(tenant, prop, plano, "executada", "editar_campanha", cid)
+      {:ok, "Pronto: ajustei a campanha #{prop["campanha_nome"]} (#{mudancas(prop)}) e conferi na plataforma."}
+    else
+      {:ok, outro} ->
+        st = outro["status"] || "indisponivel"
+        falhou(tenant, prop, plano, "campanha_nao_ajustavel:#{st}")
+        {:ok, "Nao ajustei: a campanha #{prop["campanha_nome"]} esta #{st} na plataforma e so ajusto campanha ativa ou pausada. Nada foi alterado."}
+
+      {:incoerente, motivo} ->
+        falhou(tenant, prop, plano, motivo)
+        {:ok, "Nao ajustei: com os valores que a campanha tem agora o teto ficaria menor ou igual a verba diaria. Nada foi alterado."}
+
+      false ->
+        falhou(tenant, prop, plano, "ajuste_nao_confere")
+        {:ok, "A plataforma nao confirmou o ajuste da campanha #{prop["campanha_nome"]}. Confira no Gerenciador de Anuncios; registrei o erro."}
+
+      {:error, e} ->
+        falhou(tenant, prop, plano, Executor.motivo(e))
+        {:ok, "Nao consegui ajustar a campanha #{prop["campanha_nome"]} (#{Executor.motivo(e)}). Confira no Gerenciador de Anuncios; registrei o erro."}
+    end
+  end
+
+  # o teto resultante tem que ficar maior que a verba resultante, com o que a campanha tem agora
+  defp ajuste_coerente(atual, attrs) do
+    verba = attrs["orcamento_diario"] || atual["orcamento_diario"]
+    teto = attrs["teto_total"] || atual["teto_total"]
+    if is_integer(verba) and is_integer(teto) and teto <= verba, do: {:incoerente, "teto_menor_que_a_verba"}, else: :ok
   end
 
   defp falha_texto(:ativacao_nao_liberada), do: "A ativacao real ainda nao foi liberada neste ambiente; nada foi alterado."

@@ -11,7 +11,7 @@ defmodule EtapaAudioTest do
 
   @pedido "pedido destino site; url https://corretor.com.br/lancamento; pixel 998877; publico casais 30-45 zona sul; " <>
             "criativo foto1.jpg | Apartamento novo na zona sul; diario R$ 50; teto R$ 500; janela #{Date.utc_today()} #{Date.add(Date.utc_today(), 30)}; meta 20; custo_max R$ 15"
-  @chaves ~w(cotacao_usd_brl teto_ia_brl teto_max_centavos preco_brl_por_mil preco_brl_por_min preco_usd_por_minuto notificar baixar_midia midia_dir audio openai provedor_ia)a
+  @chaves ~w(cotacao_usd_brl teto_ia_brl preco_brl_por_mil preco_brl_por_min preco_usd_por_minuto notificar baixar_midia midia_dir audio openai provedor_ia)a
 
   setup_all do
     Registro.migrar!()

@@ -418,7 +418,7 @@ defmodule Trafego.Conversa do
     linhas =
       [
         plano && "Plano em andamento #{plano["id"]} (#{plano["status"]}). #{situacao_plano(plano)}",
-        prop && "Proposta aberta #{prop["id"]} (#{prop["tipo"]} do plano #{prop["plano_id"]}), aguardando o sim ou nao do corretor; ele nao respondeu isso agora: responda o que ele perguntou e o sistema retoma a confirmacao.",
+        prop && "Proposta aberta #{prop["id"]} (#{if prop["tipo"] == "ajustar", do: "ajustar a campanha #{prop["campanha_nome"]}", else: "#{prop["tipo"]} do plano #{prop["plano_id"]}"}), aguardando o sim ou nao do corretor; ele nao respondeu isso agora: responda o que ele perguntou e o sistema retoma a confirmacao.",
         plano == nil && prop == nil && "Nao ha plano nem proposta abertos."
       ]
       |> Enum.filter(& &1)

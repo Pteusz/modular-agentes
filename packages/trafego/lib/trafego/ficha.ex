@@ -186,7 +186,7 @@ defmodule Trafego.Ficha do
   # exigencias do destino e valores invalidos (o resto tem padrao)
   defp extras(base) do
     pend = base |> Plano.pendencias() |> Enum.reject(&(&1 == "numero" and ficha(base)["sem_numero"] == true))
-    Enum.filter(pend, &(&1 in ~w(url pixel numero formulario teto_menor_que_diario teto_acima_do_maximo janela_invalida)))
+    Enum.filter(pend, &(&1 in ~w(url pixel numero formulario teto_menor_que_diario janela_invalida)))
   end
 
   @doc "Pergunta unica numerada. `repetida`: ja perguntei algo disso antes (muda o tom, nunca a lista)."
@@ -224,7 +224,6 @@ defmodule Trafego.Ficha do
   def pedido("pixel"), do: "o pixel (codigo de rastreio do site)"
   def pedido("formulario"), do: "o id do formulario"
   def pedido("teto_menor_que_diario"), do: "o teto total precisa ser maior que a verba diaria: qual teto voce quer?"
-  def pedido("teto_acima_do_maximo"), do: "o teto passou do maximo permitido (#{Plano.brl(Config.teto_max_centavos())}): qual valor, ate esse limite?"
   def pedido("janela_invalida"), do: "a janela ficou invalida: de que dia ate que dia o anuncio roda?"
   def pedido(outro), do: Plano.rotulo(outro)
 
@@ -292,7 +291,7 @@ defmodule Trafego.Ficha do
     sugerir = positivo?(p["orcamento_diario"]) and (sugestao?(p, "teto_total") or (not positivo?(p["teto_total"]) and pergunta_feita))
 
     if sugerir do
-      t = min(p["orcamento_diario"] * dias(p), Config.teto_max_centavos())
+      t = p["orcamento_diario"] * dias(p)
       p |> Map.put("teto_total", max(t, p["orcamento_diario"])) |> marcar("teto_total", "iara")
     else
       p
@@ -477,7 +476,7 @@ defmodule Trafego.Ficha do
   defp fechamento(p) do
     criativo = if presente?(get_in(p, ["criativo", "midia"])), do: "", else: " A foto ou o video do anuncio eu peco depois que voce aceitar."
 
-    "Conferi destino, teto (limite #{Plano.brl(Config.teto_max_centavos())}) e as regras de anuncio de imovel.#{criativo} " <>
+    "Conferi destino, teto e as regras de anuncio de imovel.#{criativo} " <>
       "Eu crio tudo PAUSADO; nada vai ao ar. Quer mudar algo? E so falar. Voce confirma?"
   end
 end
