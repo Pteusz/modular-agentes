@@ -136,7 +136,7 @@ defmodule Etapa51Test do
     t = tenant_pronto()
     # o plano sai em mensagens curtas de texto fixo (etapa 5.2); o prefixo "[Iara] " vem do laco, nao da fala
     r = dizer(t, @pedido)
-    assert r =~ "Voce confirma?" and r =~ "R$ 50,00"
+    assert r =~ "Você confirma?" and r =~ "R$ 50,00"
     refute_received {:ia, :falar, _}
 
     # 5.3: o sim ao plano e a proposta de ativar seguem pela fala; o texto livre ("ativa", "pausa") vai para a conversa
@@ -164,7 +164,7 @@ defmodule Etapa51Test do
     r = dizer(t, @pedido)
     refute r =~ "[Iara] "
     refute r =~ "Eu sou a Iara"
-    assert r =~ "Voce confirma?" and r =~ "R$ 50,00" and r =~ "PAUSADO"
+    assert r =~ "Você confirma?" and r =~ "R$ 50,00" and r =~ "PAUSADO"
 
     Process.put(:espia, :vazio)
     # 5.3: "ativa" vai para a conversa; sem campanha nada e proposto (a fala vazia so vale para as mensagens que ainda a usam)
@@ -177,7 +177,7 @@ defmodule Etapa51Test do
     u = tenant_pronto()
     r = dizer(u, @pedido)
     refute r =~ "ja resolvi"
-    assert r =~ "R$ 50,00" and r =~ "Voce confirma?"
+    assert r =~ "R$ 50,00" and r =~ "Você confirma?"
   end
 
   test "custo da fala entra no custo_tokens em R$ e no teto; teto bloqueado nao chama a IA de fala e mantem a mensagem do teto" do
@@ -213,11 +213,11 @@ defmodule Etapa51Test do
 
     # o que ele ja disse nao e perguntado de novo; teto perguntado e nao respondido vira sugestao (diario x dias da janela)
     r = dizer(t, "diario R$ 50")
-    assert r =~ "Montei o plano" and r =~ "Teto total: R$ 1500,00 (sugestao minha)"
-    assert r =~ "Voce confirma?"
+    assert r =~ "Montei o plano" and r =~ "Teto total: R$ 1500,00 (sugestão minha)"
+    assert r =~ "Você confirma?"
     # valores invalidos mantem o codigo no texto (significado do erro)
     u = tenant_pronto()
-    assert dizer(u, String.replace(@pedido, "teto R$ 500", "teto R$ 10")) =~ "maior que a verba diaria"
+    assert dizer(u, String.replace(@pedido, "teto R$ 500", "teto R$ 10")) =~ "maior que a verba diária"
   end
 
   test "primeiro contato: \"oi\" = UMA mensagem curta de apresentacao (sem pergunta de horario junto) e nunca se apresenta de novo" do
@@ -260,13 +260,13 @@ defmodule Etapa51Test do
     # nao respondeu (mudou de assunto): padrao 09:00 e a mensagem segue o fluxo normal
     u = perguntado(tenant_pronto())
     r = dizer(u, @pedido)
-    assert r =~ "Voce confirma?"
+    assert r =~ "Você confirma?"
     assert Iara.horario(u) == "09:00" and Iara.perfil(u)["horario_estado"] == "padrao"
 
     # primeiro contato com pedido de plano: so o plano (a apresentacao espera o plano sair do caminho)
     v = tenant_pronto()
     r = dizer(v, @pedido)
-    assert r =~ "Voce confirma?"
+    assert r =~ "Você confirma?"
     refute r =~ ~r/eu sou a iara|melhor horario/i
     r = dizer(v, "pode fazer sim")
     assert r =~ "pausada"
@@ -316,7 +316,7 @@ defmodule Etapa51Test do
     u = tenant_pronto()
     conta = "act_#{u}"
     r = falar_audio(u, @pedido)
-    assert r =~ "Voce confirma?"
+    assert r =~ "Você confirma?"
     refute r =~ ~r/por texto|Entendi pelo audio/i
     assert Simulada.todas() |> Enum.filter(&(&1["conta_id"] == conta)) == []
     assert falar_audio(u, "pode fazer sim") =~ "pausada"
@@ -401,7 +401,7 @@ defmodule Etapa51Test do
     t = novo()
     vincular(t)
 
-    texto = Iara.falar(t, "Plano p1: pronto. Voce confirma?", situacao: :plano_pronto, texto: "quero anunciar")
+    texto = Iara.falar(t, "Plano p1: pronto. Você confirma?", situacao: :plano_pronto, texto: "quero anunciar")
     assert texto == "Oi, sou a Iara! Seu plano p1 ta pronto, confirma?"
     assert_received {:openai, "/v1/responses", b}
     assert b["store"] == false and get_in(b, ["text", "format", "strict"]) == true and get_in(b, ["text", "format", "name"]) == "falar"
@@ -423,7 +423,7 @@ defmodule Etapa51Test do
     srv2 = HttpFalso.start(fn _ -> {500, %{}} end)
     on_exit(fn -> :gen_tcp.close(srv2.ls) end)
     Application.put_env(:trafego, :openai, base_url: HttpFalso.url(srv2), timeout: 2_000, modelos: %{pequena: "modelo-pequena-x", media: "modelo-media-x"})
-    assert Iara.falar(t, "Plano p1: pronto. Voce confirma?") == "Plano p1: pronto. Voce confirma?"
+    assert Iara.falar(t, "Plano p1: pronto. Você confirma?") == "Plano p1: pronto. Você confirma?"
     assert :ok = Iara.duvida_audio(t, "x")
     Application.put_env(:trafego, :provedor_ia, Trafego.IA.Falso)
   end

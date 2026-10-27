@@ -108,7 +108,7 @@ defmodule Etapa523Test do
     t = tenant_pronto()
     l = dizer(t, @completo)
     assert hd(l) =~ "Montei o plano" and length(l) == 5
-    refute junto(l) =~ ~r/numero do WhatsApp/i
+    refute junto(l) =~ ~r/número do WhatsApp/i
     plano = Plano.atual(t)
     assert plano["numero"] == "5511974208400"
     assert plano["ficha"]["origem"]["numero"] == "cadastro"
@@ -133,7 +133,7 @@ defmodule Etapa523Test do
     Application.put_env(:trafego, :numero_cadastrado, fn _ -> nil end)
     t = tenant_pronto()
     l = dizer(t, @completo)
-    assert junto(l) =~ ~r/numero do WhatsApp/i
+    assert junto(l) =~ ~r/número do WhatsApp/i
     refute junto(l) =~ "Montei o plano"
     l2 = dizer(t, "numero 21988776655")
     assert hd(l2) =~ "Montei o plano"
@@ -178,7 +178,7 @@ defmodule Etapa523Test do
     {:ok, p} = Conexao.conectar(t)
     ref = Laco.canal(p)
     Canal.Simulado.injetar(ref, :proprio, @completo)
-    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Voce confirma?")) end)
+    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Você confirma?")) end)
     env = Canal.Simulado.enviadas(ref)
     assert Enum.all?(env, &String.starts_with?(&1, "[Iara] ")) and Canal.Simulado.audios(ref) == []
     refute Enum.any?(env, &String.starts_with?(&1, "Iara: "))
@@ -195,7 +195,7 @@ defmodule Etapa523Test do
     Application.put_env(:trafego, :numero_cadastrado, fn _ -> nil end)
     t = tenant_pronto()
     dizer(t, "quero anunciar")
-    assert junto(dizer(t, "pedido objetivo vender; destino whatsapp")) =~ ~r/audio/i
+    assert junto(dizer(t, "pedido objetivo vender; destino whatsapp")) =~ ~r/áudio/i
   end
 
   test "regra de uso: audio -> falas conversacionais curtas em voz; dados para conferir continuam em texto" do
@@ -204,11 +204,11 @@ defmodule Etapa523Test do
     {:ok, r} =
       Voz.aplicar(
         t,
-        {:ok, ["Oi, tudo certo por aqui?", "Montei o plano p1 pra Torre Sul. Verba: R$ 50,00 por dia.", "Texto do anuncio: \"Apartamento novo\".", "Voce confirma?"]},
+        {:ok, ["Oi, tudo certo por aqui?", "Montei o plano p1 pra Torre Sul. Verba: R$ 50,00 por dia.", "Texto do anuncio: \"Apartamento novo\".", "Você confirma?"]},
         "audio"
       )
 
-    assert [{:audio, "FALA:Oi, tudo certo por aqui?", op, "Oi, tudo certo por aqui?"}, {:audio, "FALA:" <> @aviso, _, @aviso}, plano, anuncio, {:audio, "FALA:Voce confirma?", _, _}] = r
+    assert [{:audio, "FALA:Oi, tudo certo por aqui?", op, "Oi, tudo certo por aqui?"}, {:audio, "FALA:" <> @aviso, _, @aviso}, plano, anuncio, {:audio, "FALA:Você confirma?", _, _}] = r
     assert op[:mime] =~ "opus" and op[:segundos] >= 1
     assert plano =~ "Montei o plano p1" and anuncio =~ "Apartamento novo"
 
@@ -219,7 +219,7 @@ defmodule Etapa523Test do
     end
 
     # texto -> texto; erro passa direto
-    assert {:ok, ["Oi, tudo certo por aqui?", "Voce confirma?"]} = Voz.aplicar(t, {:ok, ["Oi, tudo certo por aqui?", "Voce confirma?"]}, "texto")
+    assert {:ok, ["Oi, tudo certo por aqui?", "Você confirma?"]} = Voz.aplicar(t, {:ok, ["Oi, tudo certo por aqui?", "Você confirma?"]}, "texto")
     assert {:error, :x} = Voz.aplicar(t, {:error, :x}, "audio")
   end
 
@@ -245,7 +245,7 @@ defmodule Etapa523Test do
     {:ok, p2} = Conexao.conectar(t2)
     ref2 = Laco.canal(p2)
     Canal.Simulado.injetar(ref2, :proprio, @completo)
-    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref2), &(&1 =~ "Voce confirma?")) end)
+    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref2), &(&1 =~ "Você confirma?")) end)
     assert Canal.Simulado.audios(ref2) == []
     Conexao.encerrar(t2)
   end
@@ -259,22 +259,22 @@ defmodule Etapa523Test do
     assert junto(dizer(t, "responde em audio")) =~ ~r/audio/i
     assert Iara.perfil(t)["voz"] == "audio" and Iara.voz_preferida(t) == "audio"
     # persiste: agora ate a mensagem escrita volta em voz
-    assert {:ok, {:audio, _, _, "Voce confirma?"}} = Voz.aplicar(t, {:ok, "Voce confirma?"}, "texto")
+    assert {:ok, {:audio, _, _, "Você confirma?"}} = Voz.aplicar(t, {:ok, "Você confirma?"}, "texto")
 
     Application.put_env(:trafego, :roteiro_ia, [{:chamar, "lembrar", %{"chave" => "preferencia_voz", "valor" => "texto"}}, {:texto, "Combinado, so texto."}])
     assert junto(dizer(t, "so texto")) =~ ~r/texto/i
     assert Iara.perfil(t)["voz"] == "texto"
     # texto manda ate sobre um audio recebido
-    assert {:ok, ["Voce confirma?"]} = Voz.aplicar(t, {:ok, ["Voce confirma?"]}, "audio")
-    assert {:ok, "Voce confirma?"} = Voz.aplicar(t, {:ok, "Voce confirma?"}, "audio")
+    assert {:ok, ["Você confirma?"]} = Voz.aplicar(t, {:ok, ["Você confirma?"]}, "audio")
+    assert {:ok, "Você confirma?"} = Voz.aplicar(t, {:ok, "Você confirma?"}, "audio")
     # a preferencia nao e dos outros
     t2 = tenant_pronto()
-    assert {:ok, {:audio, _, _, _}} = Voz.aplicar(t2, {:ok, "Voce confirma?"}, "audio")
+    assert {:ok, {:audio, _, _, _}} = Voz.aplicar(t2, {:ok, "Você confirma?"}, "audio")
   end
 
   test "falha na sintese nunca silencia: cai para texto (erro do provedor, provedor sem voz, canal sem audio)" do
     t = tenant_pronto()
-    entrada = ["Oi, tudo certo por aqui?", "Montei o plano p1 pra Torre Sul.", "Voce confirma?"]
+    entrada = ["Oi, tudo certo por aqui?", "Montei o plano p1 pra Torre Sul.", "Você confirma?"]
 
     for prov <- [FalaQuebrada, SemFala] do
       Application.put_env(:trafego, :provedor_ia, prov)
@@ -289,7 +289,7 @@ defmodule Etapa523Test do
     {:ok, p} = Conexao.conectar(t2)
     ref = Laco.canal(p)
     Canal.Simulado.injetar_midia(ref, :proprio, audio(@completo))
-    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Voce confirma?")) end)
+    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Você confirma?")) end)
     assert Canal.Simulado.audios(ref) == [] and Enum.all?(Canal.Simulado.enviadas(ref), &String.starts_with?(&1, "[Iara] "))
     Conexao.encerrar(t2)
 
@@ -299,7 +299,7 @@ defmodule Etapa523Test do
     {:ok, p3} = Conexao.conectar(t3)
     ref3 = Laco.canal(p3)
     Canal.Simulado.injetar_midia(ref3, :proprio, audio(@completo))
-    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref3), &(&1 =~ "Voce confirma?")) end)
+    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref3), &(&1 =~ "Você confirma?")) end)
     assert Canal.Simulado.audios(ref3) == [] and Enum.all?(Canal.Simulado.enviadas(ref3), &String.starts_with?(&1, "[Iara] "))
     assert Enum.any?(Canal.Simulado.enviadas(ref3), &(&1 =~ "Montei o plano"))
     Conexao.encerrar(t3)
@@ -311,10 +311,10 @@ defmodule Etapa523Test do
     Application.put_env(:trafego, :teto_ia_brl, 3.0)
     t = tenant_pronto()
     fala = "Oi, tudo certo por aqui?"
-    assert {:ok, [a1, a2, "Voce confirma?" = ultimo]} = Voz.aplicar(t, {:ok, [fala, fala, "Voce confirma?"]}, "audio")
+    assert {:ok, [a1, a2, "Você confirma?" = ultimo]} = Voz.aplicar(t, {:ok, [fala, fala, "Você confirma?"]}, "audio")
     assert {:audio, _, _, ^fala} = a1
     assert {:audio, _, _, ^fala} = a2
-    assert ultimo == "Voce confirma?"
+    assert ultimo == "Você confirma?"
 
     [c1, c2] = custos_voz(t)
     assert c1["modelo"] == "falso-voz" and c1["caracteres"] == String.length(fala) and c1["segundos"] == 2
@@ -373,7 +373,7 @@ defmodule Etapa523Test do
 
   test "versoes: nucleo 1.7.0 (canal com enviar_audio opcional) e trafego 1.12.0" do
     assert to_string(Application.spec(:nucleo, :vsn)) == "1.7.0"
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.16.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.16.1"
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:optional_callbacks)
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:callbacks)
     Code.ensure_loaded!(Nucleo.Canal.Simulado)

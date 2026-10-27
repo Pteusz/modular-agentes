@@ -202,7 +202,7 @@ defmodule Etapa59Test do
     assert [{^pid, :desvio}] = Monitor.rodar(t)
     assert desempenho(t) == []
     assert [%{"tipo" => "pausar", "plano_id" => ^pid}] = Proposta.abertas(t)
-    assert Enum.any?(avisos(), fn {tt, x} -> tt == t and x =~ pid end)
+    assert Enum.any?(avisos(), fn {tt, x} -> tt == t and x =~ ~r/alerta|queim|gast/i end)
     assert %{"ultimo_estado" => "desvio"} = Plano.ler(t, pid)
     assert status(cid)["status"] == "ATIVA"
 
@@ -232,6 +232,6 @@ defmodule Etapa59Test do
   end
 
   test "versao" do
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.16.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.16.1"
   end
 end

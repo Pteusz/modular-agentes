@@ -73,7 +73,7 @@ defmodule Etapa52Test do
     l = dizer(t, @completo)
     assert length(l) == 5 and Enum.all?(l, &is_binary/1)
     assert hd(l) =~ "Montei o plano" and hd(l) =~ "R$ 50,00"
-    assert List.last(l) =~ "Voce confirma?" and List.last(l) =~ "PAUSADO"
+    assert List.last(l) =~ "Você confirma?" and List.last(l) =~ "PAUSADO"
     refute Enum.any?(l, &(&1 =~ ~r/^\s*1\. /m)), "nao pode haver pergunta numerada"
     assert %{"status" => "aguardando_confirmacao"} = Plano.atual(t)
   end
@@ -90,7 +90,7 @@ defmodule Etapa52Test do
     # respondeu so a verba: o teto (ja perguntado) vira sugestao = diario x dias da janela e o plano sai
     l = dizer(t, "diario R$ 40")
     assert hd(l) =~ "Montei o plano"
-    assert junto(l) =~ "Teto total: R$ 1200,00 (sugestao minha)"
+    assert junto(l) =~ "Teto total: R$ 1200,00 (sugestão minha)"
     assert %{"orcamento_diario" => 4000, "teto_total" => 120_000} = Plano.atual(t)
   end
 
@@ -109,7 +109,7 @@ defmodule Etapa52Test do
     assert %{"imovel" => "Torre Sul", "objetivo" => "vender"} = Plano.atual(t)
 
     l = dizer(t, "diario R$ 30")
-    assert hd(l) =~ "Montei o plano" and junto(l) =~ "Teto total: R$ 900,00 (sugestao minha)"
+    assert hd(l) =~ "Montei o plano" and junto(l) =~ "Teto total: R$ 900,00 (sugestão minha)"
   end
 
   test "corrigir um campo muda so ele; ajuste em linguagem natural reenvia so a mensagem afetada" do
@@ -183,10 +183,10 @@ defmodule Etapa52Test do
     {:ok, p} = Conexao.conectar(t)
     ref = Laco.canal(p)
     Canal.Simulado.injetar(ref, :proprio, @completo)
-    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Voce confirma?")) end)
+    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref), &(&1 =~ "Você confirma?")) end)
     env = Canal.Simulado.enviadas(ref)
     assert length(env) >= 5 and Enum.all?(env, &String.starts_with?(&1, "[Iara] "))
-    assert Enum.find_index(env, &(&1 =~ "Montei o plano")) < Enum.find_index(env, &(&1 =~ "Voce confirma?"))
+    assert Enum.find_index(env, &(&1 =~ "Montei o plano")) < Enum.find_index(env, &(&1 =~ "Você confirma?"))
     Conexao.encerrar(t)
 
     # teto_por_min = 3: so 3 saem, o excedente vai junto na ultima (nada se perde, ordem preservada)
@@ -195,10 +195,10 @@ defmodule Etapa52Test do
     {:ok, p2} = Conexao.conectar(t2)
     ref2 = Laco.canal(p2)
     Canal.Simulado.injetar(ref2, :proprio, @completo)
-    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref2), &(&1 =~ "Voce confirma?")) end)
+    assert esperar(fn -> Enum.any?(Canal.Simulado.enviadas(ref2), &(&1 =~ "Você confirma?")) end)
     env2 = Canal.Simulado.enviadas(ref2)
     assert length(env2) == 3 and Enum.all?(env2, &String.starts_with?(&1, "[Iara] "))
-    assert junto(env2) =~ "Montei o plano" and List.last(env2) =~ "Voce confirma?"
+    assert junto(env2) =~ "Montei o plano" and List.last(env2) =~ "Você confirma?"
     Conexao.encerrar(t2)
   end
 

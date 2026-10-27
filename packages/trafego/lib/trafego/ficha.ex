@@ -5,7 +5,7 @@ defmodule Trafego.Ficha do
   criativo e meta. Cada mensagem (texto ou audio) preenche quantos campos der; campo preenchido nunca e perguntado de novo e a
   correcao de um ponto atualiza SO aquele campo.
 
-    * "origem": campo => "corretor" | "iara" (o que a Iara sugeriu aparece como "sugestao minha"; a IA so sugere onde o corretor nao disse)
+    * "origem": campo => "corretor" | "iara" (o que a Iara sugeriu aparece como "sugestão minha"; a IA so sugere onde o corretor nao disse)
     * "perguntados": campos do nucleo ja perguntados (o teto perguntado e nao respondido vira SUGESTAO: diario x dias da janela)
 
   Nucleo (a unica coisa que pode ser perguntada): tipo de campanha (destino, perguntado ANTES de tudo, sem assumir), imovel, verba diaria e teto, mais o que o destino exige (numero, url...).
@@ -195,7 +195,7 @@ defmodule Trafego.Ficha do
     intro =
       cond do
         itens == ["destino"] -> nil
-        depois_de_duvida -> "Alem disso, me conta:"
+        depois_de_duvida -> "Além disso, me conta:"
         repetida -> "Ainda preciso de:"
         true -> "Pra montar o plano me conta:"
       end
@@ -204,16 +204,16 @@ defmodule Trafego.Ficha do
   end
 
   # tipo de campanha: frase unica, sem lista; se ele nao decidiu, explica a diferenca e pergunta de novo (nunca escolhe por ele)
-  defp pergunta_tipo(false), do: "Que tipo de campanha voce quer fazer: com formulario, levando pro WhatsApp ou levando pro site?"
+  defp pergunta_tipo(false), do: "Que tipo de campanha você quer fazer: com formulário, levando pro WhatsApp ou levando pro site?"
 
   defp pergunta_tipo(true),
     do:
-      "Sem problema. No formulario a pessoa deixa os dados no proprio anuncio, no WhatsApp ela chama voce direto na conversa e " <>
-        "no site ela cai na pagina do imovel. Qual dos tres voce quer?"
+      "Sem problema. No formulário a pessoa deixa os dados no próprio anúncio, no WhatsApp ela chama você direto na conversa e " <>
+        "no site ela cai na página do imóvel. Qual dos três você quer?"
 
   defp lista(intro, itens, plano) do
     lista = itens |> Enum.with_index(1) |> Enum.map_join("\n", fn {i, n} -> "#{n}. #{pedido(i, plano)}" end)
-    intro <> "\n" <> lista <> "\nPode mandar tudo junto, por texto ou audio."
+    intro <> "\n" <> lista <> "\nPode mandar tudo junto, por texto ou áudio."
   end
 
   # o numero muda de pergunta conforme o que ja foi dito (sem DDD, ilegivel)
@@ -221,25 +221,25 @@ defmodule Trafego.Ficha do
     f = ficha(plano)
 
     cond do
-      is_binary(f["numero_sem_ddd"]) -> "o DDD do numero #{f["numero_sem_ddd"]} (so o DDD, ex.: 11)"
-      is_binary(f["numero_invalido"]) -> "o numero do WhatsApp com DDD (nao entendi \"#{f["numero_invalido"]}\")"
+      is_binary(f["numero_sem_ddd"]) -> "o DDD do número #{f["numero_sem_ddd"]} (só o DDD, ex.: 11)"
+      is_binary(f["numero_invalido"]) -> "o número do WhatsApp com DDD (não entendi \"#{f["numero_invalido"]}\")"
       true -> pedido("numero")
     end
   end
 
   def pedido(item, _plano), do: pedido(item)
 
-  def pedido("destino"), do: "o tipo de campanha (formulario, WhatsApp ou site)"
-  def pedido("objetivo"), do: "o que quer com o anuncio (vender, gerar contatos...)"
-  def pedido("imovel"), do: "qual imovel vai anunciar"
+  def pedido("destino"), do: "o tipo de campanha (formulário, WhatsApp ou site)"
+  def pedido("objetivo"), do: "o que quer com o anúncio (vender, gerar contatos...)"
+  def pedido("imovel"), do: "qual imóvel vai anunciar"
   def pedido("orcamento_diario"), do: "quanto quer gastar por dia (em R$)"
-  def pedido("teto_total"), do: "o teto total (se nao tiver, eu sugiro)"
-  def pedido("numero"), do: "o numero do WhatsApp que recebe os contatos, com DDD"
+  def pedido("teto_total"), do: "o teto total (se não tiver, eu sugiro)"
+  def pedido("numero"), do: "o número do WhatsApp que recebe os contatos, com DDD"
   def pedido("url"), do: "o link do site"
-  def pedido("pixel"), do: "o pixel (codigo de rastreio do site)"
-  def pedido("formulario"), do: "o id do formulario"
-  def pedido("teto_menor_que_diario"), do: "o teto total precisa ser maior que a verba diaria: qual teto voce quer?"
-  def pedido("janela_invalida"), do: "a janela ficou invalida: de que dia ate que dia o anuncio roda?"
+  def pedido("pixel"), do: "o pixel (código de rastreio do site)"
+  def pedido("formulario"), do: "o id do formulário"
+  def pedido("teto_menor_que_diario"), do: "o teto total precisa ser maior que a verba diária: qual teto você quer?"
+  def pedido("janela_invalida"), do: "a janela ficou inválida: de que dia até que dia o anúncio roda?"
   def pedido(outro), do: Plano.rotulo(outro)
 
   # ---- padroes sensatos (sugestao da Iara)
@@ -434,42 +434,42 @@ defmodule Trafego.Ficha do
     end
   end
 
-  defp sug(p, chave), do: if(origem(p, chave) == "iara", do: " (sugestao minha)", else: "")
+  defp sug(p, chave), do: if(origem(p, chave) == "iara", do: " (sugestão minha)", else: "")
 
   defp resumo(p) do
-    alvo = p["imovel"] || p["url"] || "o anuncio"
-    "Montei o plano #{p["id"]} pra #{alvo}. Objetivo: #{objetivo(p)}. Verba: #{Plano.brl(p["orcamento_diario"])} por dia."
+    alvo = p["imovel"] || p["url"] || "o anúncio"
+    "Montei o plano pra #{alvo}. Objetivo: #{objetivo(p)}. Verba: #{Plano.brl(p["orcamento_diario"])} por dia."
   end
 
   defp objetivo(p) do
     cond do
       presente?(p["objetivo"]) -> p["objetivo"]
       p["resultado"] == "conversa_iniciada" -> "gerar conversas no WhatsApp"
-      p["resultado"] == "lead" -> "gerar contatos pelo formulario"
+      p["resultado"] == "lead" -> "gerar contatos pelo formulário"
       p["resultado"] == "evento_pixel" -> "levar gente ao site"
       true -> "gerar contatos"
     end
   end
 
   defp publico_destino(p) do
-    "Publico: #{p["publico"]}#{sug(p, "publico")}. Destino: #{destino_txt(p)}#{sug(p, "destino")}."
+    "Público: #{p["publico"]}#{sug(p, "publico")}. Destino: #{destino_txt(p)}#{sug(p, "destino")}."
   end
 
   defp destino_txt(%{"destino" => "whatsapp"} = p) do
     cond do
       presente?(p["numero"]) -> "conversa no WhatsApp (#{formatar_numero(p["numero"])}#{if origem(p, "numero") == "cadastro", do: ", do seu cadastro", else: ""})"
-      ficha(p)["sem_numero"] == true -> "conversa no WhatsApp da sua Pagina"
+      ficha(p)["sem_numero"] == true -> "conversa no WhatsApp da sua Página"
       true -> "conversa no WhatsApp"
     end
   end
 
   defp destino_txt(%{"destino" => "site"} = p), do: "site#{if presente?(p["url"]), do: " (" <> p["url"] <> ")", else: ""}"
-  defp destino_txt(%{"destino" => "formulario"}), do: "formulario"
+  defp destino_txt(%{"destino" => "formulario"}), do: "formulário"
   defp destino_txt(_), do: "a definir"
 
   defp anuncio(p) do
-    nota = if ficha(p)["reescrita"], do: " Tirei do texto o que a regra de anuncio de imovel nao permite.", else: ""
-    "Texto do anuncio#{sug(p, "texto")}: \"#{get_in(p, ["criativo", "texto"])}\".#{nota}"
+    nota = if ficha(p)["reescrita"], do: " Tirei do texto o que a regra de anúncio de imóvel não permite.", else: ""
+    "Texto do anúncio#{sug(p, "texto")}: \"#{get_in(p, ["criativo", "texto"])}\".#{nota}"
   end
 
   defp meta_teto(p) do
@@ -478,9 +478,9 @@ defmodule Trafego.Ficha do
   end
 
   defp fechamento(p) do
-    criativo = if presente?(get_in(p, ["criativo", "midia"])), do: "", else: " A foto ou o video do anuncio eu peco depois que voce aceitar."
+    criativo = if presente?(get_in(p, ["criativo", "midia"])), do: "", else: " A foto ou o vídeo do anúncio eu peço depois que você aceitar."
 
-    "Conferi destino, teto e as regras de anuncio de imovel.#{criativo} " <>
-      "Eu crio tudo PAUSADO; nada vai ao ar. Quer mudar algo? E so falar. Voce confirma?"
+    "Conferi destino, teto e as regras de anúncio de imóvel.#{criativo} " <>
+      "Eu crio tudo PAUSADO; nada vai ao ar. Quer mudar algo? É só falar. Você confirma?"
   end
 end

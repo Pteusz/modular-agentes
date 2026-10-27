@@ -99,7 +99,7 @@ defmodule Trafego.Agente do
 
   defp retomada_pendente(tenant) do
     case retomada(tenant) do
-      "" -> if (p = Proposta.atual(tenant)), do: " Sobre a proposta #{p["id"]}: voce confirma?", else: ""
+      "" -> if Proposta.atual(tenant), do: " Sobre a proposta: você confirma?", else: ""
       r -> r
     end
   end
@@ -118,9 +118,9 @@ defmodule Trafego.Agente do
   defp retomada(tenant) do
     case Plano.atual(tenant) do
       %{"status" => "rascunho"} = p -> if Plano.vazio?(p), do: "", else: " " <> pergunta_pendente(tenant, p)
-      %{"status" => "aguardando_confirmacao", "id" => id} -> " Sobre o plano #{id}: voce confirma?"
-      %{"status" => "aguardando_criativo", "id" => id} -> " Sobre o plano #{id}: falta so a foto ou o video do anuncio."
-      %{"status" => "erro", "id" => id} -> " O plano #{id} parou por erro: me diz o que ajustar que eu tento de novo."
+      %{"status" => "aguardando_confirmacao", "id" => _id} -> " Sobre o plano: você confirma?"
+      %{"status" => "aguardando_criativo", "id" => _id} -> " Sobre o plano: falta só a foto ou o vídeo do anúncio."
+      %{"status" => "erro", "id" => _id} -> " O plano parou por erro: me diz o que ajustar que eu tento de novo."
       _ -> ""
     end
   end
@@ -208,14 +208,14 @@ defmodule Trafego.Agente do
 
     case Ativacao.executar(tenant, prop["id"]) do
       {:ok, texto} -> {:ok, texto}
-      {:error, _} -> {:ok, "Nao consegui executar a proposta #{prop["id"]}; nada foi alterado."}
+      {:error, _} -> {:ok, "Não consegui executar a proposta; nada foi alterado."}
     end
   end
 
   defp decidir_proposta(tenant, prop, "nao", _texto) do
     Evento.emitir(tenant, "confirmacao", prop["plano_id"], "planejador", "nao", %{"proposta_id" => prop["id"]})
     Proposta.salvar(tenant, Map.put(prop, "status", "recusada"))
-    {:ok, "Ok, cancelei a proposta #{prop["id"]}; nada foi alterado."}
+    {:ok, "Ok, cancelei a proposta; nada foi alterado."}
   end
 
   defp decidir_proposta(tenant, prop, _, texto) do
@@ -440,7 +440,7 @@ defmodule Trafego.Agente do
 
     case antes && Ficha.diferencas(antes, plano) do
       nil -> {:ok, Ficha.mensagens(plano), situacao: :plano, plano_id: plano["id"]}
-      [] -> {:ok, "Nao vi nada diferente no plano #{plano["id"]}. O que voce quer mudar?"}
+      [] -> {:ok, "Não vi nada diferente no plano. O que voce quer mudar?"}
       diferentes -> {:ok, diferentes, situacao: :plano, plano_id: plano["id"]}
     end
   end
@@ -502,7 +502,7 @@ defmodule Trafego.Agente do
     end
   end
 
-  defp lembrete_criativo(plano), do: "Ainda aguardo a foto (png ou jpg) ou o video (mp4) do anuncio do plano #{plano["id"]}; nada foi criado. Manda por aqui, ou diz que cancela."
+  defp lembrete_criativo(_plano), do: "Ainda aguardo a foto (png ou jpg) ou o video (mp4) do anúncio do plano; nada foi criado. Manda por aqui, ou diz que cancela."
 
   # ---- confirmacao em texto livre
   defp confirmar(tenant, plano, texto) do
@@ -528,7 +528,7 @@ defmodule Trafego.Agente do
 
   defp repergunta(plano) do
     if Ficha.ficha(plano)["erro_execucao"] == true,
-      do: "O plano #{plano["id"]} parou por causa do erro. Me diz o que ajustar que eu tento de novo, ou fala \"cancela\" que eu descarto.",
+      do: "O plano parou por causa do erro. Me diz o que ajustar que eu tento de novo, ou fala \"cancela\" que eu descarto.",
       else: @repergunta
   end
 
@@ -548,7 +548,7 @@ defmodule Trafego.Agente do
     Evento.emitir(tenant, "confirmacao", plano["id"], "planejador", "nao")
     Plano.salvar(tenant, Map.put(plano, "status", "recusado"))
     Plano.definir_atual(tenant, nil)
-    {:ok, "Ok, cancelei o plano #{plano["id"]}; nada foi alterado."}
+    {:ok, "Ok, cancelei o plano; nada foi alterado."}
   end
 
   defp executar_plano(tenant, plano) do
@@ -592,7 +592,7 @@ defmodule Trafego.Agente do
   end
 
   # causa real em portugues + o que ficou na Meta + as saidas (mensagens curtas, texto fixo)
-  defp falha(tenant, plano, e) do
+  defp falha(tenant, _plano, e) do
     id = Executor.campanha_parcial(e)
 
     rascunho =
@@ -615,7 +615,7 @@ defmodule Trafego.Agente do
       "Nao consegui criar a campanha: #{Executor.explicar(e)}.",
       rascunho,
       saidas,
-      "Seu plano #{plano["id"]} continua guardado: me diz o que ajustar (ex.: o numero) e eu tento de novo."
+      "Seu plano continua guardado: me diz o que ajustar (ex.: o numero) e eu tento de novo."
     ]
     |> Enum.reject(&is_nil/1)
   end

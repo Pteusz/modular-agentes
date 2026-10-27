@@ -85,13 +85,13 @@ defmodule Etapa45Test do
 
     # o pedido de ativar so cria PROPOSTA (diz o que vai fazer e pergunta); nada muda na plataforma
     r = resp(Agente.processar(t, "pode ativar a campanha?"))
-    assert r =~ ~r/ativar/i and r =~ "confirma" and r =~ pid
+    assert r =~ ~r/ativar/i and r =~ "confirma" and not (r =~ pid)
     assert [%{"tipo" => "ativar", "status" => "aguardando_confirmacao", "plano_id" => ^pid}] = Proposta.listar(t)
     assert status(cid)["status"] == "PAUSADA"
 
     # ambigua: repergunta curta, nada executa (varias vezes)
-    assert resp(Agente.processar(t, "hmm, talvez, nao sei ainda")) =~ "voce confirma?"
-    assert resp(Agente.processar(t, "sim mas nao")) =~ "voce confirma?"
+    assert resp(Agente.processar(t, "hmm, talvez, nao sei ainda")) =~ "você confirma?"
+    assert resp(Agente.processar(t, "sim mas nao")) =~ "você confirma?"
     assert status(cid)["status"] == "PAUSADA"
     assert [%{"status" => "aguardando_confirmacao"}] = Proposta.listar(t)
 
@@ -174,7 +174,7 @@ defmodule Etapa45Test do
     agora = DateTime.utc_now()
     assert [{^pid, :desvio}] = Monitor.rodar(t, agora: agora)
     msgs = avisos() |> Enum.map(&elem(&1, 1))
-    assert Enum.any?(msgs, &(&1 =~ ~r/alerta|queim|gast/i and &1 =~ pid))
+    assert Enum.any?(msgs, &(&1 =~ ~r/alerta|queim|gast/i and not (&1 =~ pid)))
     assert status(cid)["status"] == "ATIVA"
     assert [%{"tipo" => "pausar"}] = Proposta.abertas(t)
 
