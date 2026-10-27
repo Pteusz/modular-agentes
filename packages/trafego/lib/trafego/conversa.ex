@@ -288,9 +288,15 @@ defmodule Trafego.Conversa do
     nt = norm(texto)
     # a entrega montada por codigo (resumo/proposta) nao e repetida se o modelo ja a reproduziu
     entrega = Enum.reject(entrega_textos(ctx.entrega), &(is_binary(&1) and String.contains?(nt, norm(&1))))
+    # pergunta fixa da ficha (tipo de campanha, lista do que falta): ela e a resposta; o texto livre do modelo na mesma volta
+    # repetiria a mesma pergunta com outras palavras (duas mensagens), entao e descartado
+    texto = if pergunta_fixa?(ctx.entrega), do: "", else: texto
     partes = [texto, pausas_sem_motivo(texto, ctx)] ++ entrega
     saida(tenant, partes, ctx)
   end
+
+  defp pergunta_fixa?({:ok, _, extra}) when is_list(extra), do: extra[:situacao] == :falta and extra[:fixo] == true
+  defp pergunta_fixa?(_), do: false
 
   # registro automatico do item da apresentacao (sem chamada extra ao modelo): so se for o proximo item, nada esta no ar e o texto
   # realmente o diz. O modelo pode ainda registrar com a ferramenta `apresentacao`; o que ele ja registrou vale.
@@ -348,7 +354,7 @@ defmodule Trafego.Conversa do
   end
 
   defp saida(tenant, partes, ctx) do
-    lista = partes |> List.flatten() |> Enum.map(&to_string/1) |> Enum.map(&Texto.limpar/1) |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+    lista = partes |> List.flatten() |> Enum.map(&to_string/1) |> Enum.map(&Texto.limpar/1) |> Enum.map(&sem_id_interno/1) |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
     Evento.emitir(tenant, "operacao", nil, "planejador", "conversa_resposta", %{"efeitos" => Enum.map(ctx.efeitos, &elem(&1, 0))})
 
     case lista do
@@ -356,6 +362,9 @@ defmodule Trafego.Conversa do
       _ -> {:ok, lista, entrega_extra(ctx.entrega)}
     end
   end
+
+  # id interno de plano/proposta (p1, q2) nunca vai pro corretor, mesmo que o modelo escreva campanha p1
+  defp sem_id_interno(t), do: Regex.replace(~r/\b(campanha|plano|proposta)\s+[pq]\d+\b/iu, t, "\\1")
 
   defp entrega_textos({:ok, base, _extra}), do: List.wrap(base)
   defp entrega_textos({:ok, base}), do: List.wrap(base)
@@ -418,8 +427,8 @@ defmodule Trafego.Conversa do
 
     linhas =
       [
-        plano && "Plano em andamento #{plano["id"]} (#{plano["status"]}). #{situacao_plano(plano)}",
-        prop && "Proposta aberta #{prop["id"]} (#{if prop["tipo"] == "ajustar", do: "ajustar a campanha #{prop["campanha_nome"]}", else: "#{prop["tipo"]} do plano #{prop["plano_id"]}"}), aguardando o sim ou nao do corretor; ele nao respondeu isso agora: responda o que ele perguntou e o sistema retoma a confirmacao.",
+        plano && "Plano em andamento (#{plano["status"]}), id interno #{plano["id"]} (nunca diga esse id ao corretor). #{situacao_plano(plano)}",
+        prop && "Proposta aberta (id interno #{prop["id"]}, nunca diga ao corretor; #{if prop["tipo"] == "ajustar", do: "ajustar a campanha #{prop["campanha_nome"]}", else: "#{prop["tipo"]} do plano #{prop["plano_id"]}"}), aguardando o sim ou nao do corretor; ele nao respondeu isso agora: responda o que ele perguntou e o sistema retoma a confirmacao.",
         plano == nil && prop == nil && "Nao ha plano nem proposta abertos."
       ]
       |> Enum.filter(& &1)

@@ -374,10 +374,11 @@ defmodule Etapa56Test do
       pid = self()
       espia = fn entrada -> send(pid, {:instrucao, entrada["instrucao"]}) && {:chamar, "planejar", %{"pedido" => "pedido objetivo vender; imovel Torre Sul"}} end
       roteiro([espia, {:texto, "Bora! Qual o orçamento por dia pra essa campanha?"}])
-      assert [msg | _] = dizer(t, "sim, bora")
+      assert [msg] = dizer(t, "sim, bora")
       assert_received {:instrucao, i}
       assert i =~ "campanha_perguntada=sim" and i =~ "apresentacao encerrada"
-      assert msg =~ "orçamento"
+      # a pergunta fixa da ficha (tipo de campanha) e a resposta; o texto livre do modelo na mesma volta e descartado
+      assert msg =~ "tipo de campanha" and not (msg =~ "orçamento")
       assert Trafego.Plano.atual(t) != nil
     end
 

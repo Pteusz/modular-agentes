@@ -321,7 +321,7 @@ defmodule Etapa42Test do
 
         # ---- 5. confirmacao em texto livre (faixa pequena): ambigua repergunta; clara executa PAUSADO na Meta
         # 5.3: resposta que nao e sim nem nao vai para a conversa, que responde e retoma a confirmacao (nada executa)
-        assert resp(Agente.processar(ta, "hmm, talvez, nao sei")) =~ ~r/voce confirma\?/i
+        assert resp(Agente.processar(ta, "hmm, talvez, nao sei")) =~ ~r/você confirma\?/i
         assert resp(Agente.processar(ta, "ENUM-INVALIDO")) == @confirma
         assert posts(msrv) == []
         r = resp(Agente.processar(ta, "Perfeito, pode fazer sim!"))

@@ -73,9 +73,9 @@ defmodule Trafego.Ativacao do
   end
 
   @doc "Texto da proposta: diz o que vai fazer e pergunta."
-  def texto(%{"tipo" => "ativar"} = prop, plano) do
-    "Vou ATIVAR a campanha #{plano["campanha_id"]} do plano #{plano["id"]} (#{Plano.resumo(plano)}) Depois de ativar ela passa a gastar de verdade: " <>
-      "#{Plano.brl(plano["orcamento_diario"])} por dia, ate #{Plano.brl(plano["teto_total"])} no total. Proposta #{prop["id"]}. Voce confirma?"
+  def texto(%{"tipo" => "ativar"}, plano) do
+    "Vou ATIVAR a campanha #{plano["campanha_id"]} (#{Plano.resumo(plano)}) Depois de ativar ela passa a gastar de verdade: " <>
+      "#{Plano.brl(plano["orcamento_diario"])} por dia, ate #{Plano.brl(plano["teto_total"])} no total. Você confirma?"
   end
 
   def texto(%{"tipo" => "pausar"} = prop, plano) do
@@ -85,11 +85,11 @@ defmodule Trafego.Ativacao do
         _ -> "voce pediu"
       end
 
-    "Vou PAUSAR a campanha #{plano["campanha_id"]} do plano #{plano["id"]} porque #{motivo}. Pausar nao apaga nada e da para ativar de novo depois. Proposta #{prop["id"]}. Voce confirma?"
+    "Vou PAUSAR a campanha #{plano["campanha_id"]} porque #{motivo}. Pausar nao apaga nada e da para ativar de novo depois. Você confirma?"
   end
 
   def texto(%{"tipo" => "ajustar"} = prop, _plano) do
-    "Vou ajustar a campanha #{prop["campanha_nome"]}: #{mudancas(prop)}. Proposta #{prop["id"]}. Voce confirma?"
+    "Vou ajustar a campanha #{prop["campanha_nome"]}: #{mudancas(prop)}. Você confirma?"
   end
 
   # "antes → depois" so do que muda; o valor e o que o corretor disse

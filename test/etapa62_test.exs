@@ -61,7 +61,7 @@ defmodule Etapa62Test do
     t = tenant_pronto()
     l = dizer(t, "pedido imovel Torre Sul")
     assert [tipo] = l
-    assert tipo =~ "formulario" and tipo =~ "WhatsApp" and tipo =~ "site"
+    assert tipo =~ "formulário" and tipo =~ "WhatsApp" and tipo =~ "site"
     refute tipo =~ "Pra montar o plano"
     refute tipo =~ ~r/^\d\./m
     assert limpo?(l)
@@ -70,8 +70,8 @@ defmodule Etapa62Test do
     refute pergunta_tipo?(l)
     txt = junto(l)
     assert txt =~ "Pra montar o plano me conta:"
-    assert txt =~ "quanto quer gastar por dia" and txt =~ "teto total" and txt =~ "numero do WhatsApp"
-    refute txt =~ "qual imovel", "o imovel ja foi dito"
+    assert txt =~ "quanto quer gastar por dia" and txt =~ "teto total" and txt =~ "número do WhatsApp"
+    refute txt =~ "qual imóvel", "o imovel ja foi dito"
   end
 
   test "sem imovel dito: depois do tipo a lista pede imovel, verba e teto" do
@@ -79,7 +79,7 @@ defmodule Etapa62Test do
     assert pergunta_tipo?(dizer(t, "pedido objetivo vender"))
     txt = t |> dizer("pedido destino whatsapp") |> junto()
     assert txt =~ "Pra montar o plano me conta:"
-    assert txt =~ "qual imovel" and txt =~ "quanto quer gastar por dia" and txt =~ "teto total"
+    assert txt =~ "qual imóvel" and txt =~ "quanto quer gastar por dia" and txt =~ "teto total"
     refute txt =~ "tipo de campanha"
   end
 
@@ -103,13 +103,13 @@ defmodule Etapa62Test do
     assert pergunta_tipo?(dizer(t, "pedido imovel Torre Sul"))
     l = dizer(t, "pedido tanto faz")
     assert [re] = l
-    assert re =~ "formulario" and re =~ "WhatsApp" and re =~ "site" and re =~ "Qual dos tres"
+    assert re =~ "formulário" and re =~ "WhatsApp" and re =~ "site" and re =~ "Qual dos três"
     refute re =~ ~r/recomendo|sugiro|melhor opcao|indico/i
     refute re =~ "Pra montar o plano"
     assert limpo?(l)
 
     # decidiu: segue a lista
-    assert dizer(t, "pedido destino formulario") |> junto() =~ "o id do formulario"
+    assert dizer(t, "pedido destino formulario") |> junto() =~ "o id do formulário"
   end
 
   test "destino ja dito antes (rascunho ou primeira fala): nao pergunta o tipo" do
@@ -122,6 +122,6 @@ defmodule Etapa62Test do
   end
 
   test "versao do pacote" do
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.16.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.16.1"
   end
 end

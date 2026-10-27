@@ -163,7 +163,7 @@ defmodule Etapa521Test do
     {t, _} = tenant_pronto()
     l = dizer(t, @base <> "; sem_numero sim")
     assert hd(l) =~ "Montei o plano"
-    assert junto(l) =~ "WhatsApp da sua Pagina"
+    assert junto(l) =~ "WhatsApp da sua Página"
     assert [pede] = dizer(t, "pode fazer sim")
     assert pede =~ "foto ou o video"
     assert [fim] = foto(t)

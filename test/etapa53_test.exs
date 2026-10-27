@@ -218,7 +218,7 @@ defmodule Etapa53Test do
 
     roteiro([{:chamar, "campanhas", %{"ref" => nil, "dias" => nil}}, {:texto, "Voce tem 1 campanha: c1."}])
     l = junto(dizer(t, "antes: quantas campanhas eu tenho?"))
-    assert l =~ "1 campanha" and l =~ "Sobre o plano p1: voce confirma?"
+    assert l =~ "1 campanha" and l =~ "Sobre o plano: você confirma?"
     assert Plano.atual(t)["status"] == "aguardando_confirmacao"
 
     l2 = junto(dizer(t, "sim"))
@@ -234,7 +234,7 @@ defmodule Etapa53Test do
 
     roteiro([{:texto, "Em geral campanhas novas levam uns dias para render."}])
     l = junto(dizer(t, "isso demora pra render?"))
-    assert l =~ "Sobre a proposta #{prop["id"]}: voce confirma?"
+    assert l =~ "Sobre a proposta: você confirma?"
     assert Proposta.ler(t, prop["id"])["status"] == "aguardando_confirmacao" and status(t, id) == "PAUSADA"
 
     assert junto(dizer(t, "nao")) =~ "cancelei a proposta"
@@ -247,7 +247,7 @@ defmodule Etapa53Test do
     plano = Plano.salvar(t, Map.merge(Plano.novo(t), %{"status" => "verificado", "campanha_id" => id, "orcamento_diario" => 5000, "teto_total" => 50_000, "janela" => %{"inicio" => "2026-11-01", "fim" => "2099-11-30"}}))
     roteiro([{:chamar, "propor_ativar", %{"ref" => "apartamento"}}, {:texto, ""}])
     l = junto(dizer(t, "ativa a do apartamento"))
-    assert l =~ "Voce confirma?" and l =~ "ATIVAR"
+    assert l =~ "Você confirma?" and l =~ "ATIVAR"
     assert (p = Proposta.atual(t)) && p["tipo"] == "ativar" && p["plano_id"] == plano["id"]
     assert status(t, id) == "PAUSADA"
 

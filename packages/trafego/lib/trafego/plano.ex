@@ -180,7 +180,7 @@ defmodule Trafego.Plano do
   def brl(_), do: "?"
 
   def resumo(p) do
-    "Plano #{p["id"]}: destino #{p["destino"]} (resultado: #{p["resultado"]}); publico: #{p["publico"]}; " <>
+    "Plano: destino #{p["destino"]} (resultado: #{p["resultado"]}); publico: #{p["publico"]}; " <>
       "criativo: #{get_in(p, ["criativo", "midia"])}; orcamento diario #{brl(p["orcamento_diario"])}, teto #{brl(p["teto_total"])}; " <>
       "janela #{get_in(p, ["janela", "inicio"])} a #{get_in(p, ["janela", "fim"])}; meta #{get_in(p, ["meta", "resultados"])} resultados a ate #{brl(get_in(p, ["meta", "custo_max"]))} cada."
   end

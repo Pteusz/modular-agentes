@@ -111,7 +111,7 @@ defmodule Etapa61Test do
     t = tenant_pronto()
     dizer(t, "pedido destino site; url https://corretor.com.br/lancamento; pixel 998877; publico casais 30-45")
     r = junto(dizer(t, "diario R$ 1000"))
-    assert r =~ "Montei o plano" and r =~ "Teto total: R$ 30000,00 (sugestao minha)"
+    assert r =~ "Montei o plano" and r =~ "Teto total: R$ 30000,00 (sugestão minha)"
     refute r =~ "limite R$"
     assert %{"orcamento_diario" => 100_000, "teto_total" => 3_000_000} = Plano.atual(t)
   end
@@ -355,6 +355,6 @@ defmodule Etapa61Test do
   end
 
   test "versao do pacote" do
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.16.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.16.1"
   end
 end

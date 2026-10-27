@@ -109,13 +109,13 @@ defmodule Trafego.Monitor do
 
   # desvio: proposta de pausar (sem duplicar) e, se esta queimando orcamento, aviso imediato (no maximo a cada #{@alerta_horas}h)
   defp desvio(tenant, p, m, agora) do
-    prop = Proposta.aberta(tenant, "pausar", p["id"]) || Proposta.criar(tenant, "pausar", p["id"], %{"motivo" => "desvio_da_meta"})
+    Proposta.aberta(tenant, "pausar", p["id"]) || Proposta.criar(tenant, "pausar", p["id"], %{"motivo" => "desvio_da_meta"})
 
     if queimando?(p, m) and alerta_liberado?(p, agora) do
       Notificar.enviar(
         tenant,
-        "Alerta: o plano #{p["id"]} ja gastou #{Plano.brl(m["gasto"])} (teto #{Plano.brl(p["teto_total"])}) com #{m["resultados"] || 0} resultados, fora da meta. " <>
-          "Propus pausar a campanha (proposta #{prop["id"]}); responda confirmando para eu pausar."
+        "Alerta: a campanha já gastou #{Plano.brl(m["gasto"])} (teto #{Plano.brl(p["teto_total"])}) com #{m["resultados"] || 0} resultados, fora da meta. " <>
+          "Propus pausar a campanha; responda confirmando para eu pausar."
       )
 
       Map.put(p, "alerta_em", DateTime.to_iso8601(agora))
@@ -145,7 +145,7 @@ defmodule Trafego.Monitor do
   end
 
   defp texto_relatorio(tenant, p, m, estado, encerrado?) do
-    titulo = if encerrado?, do: "Relatorio final do plano #{p["id"]} (janela encerrada)", else: "Relatorio do plano #{p["id"]}"
+    titulo = if encerrado?, do: "Relatorio final do plano (janela encerrada)", else: "Relatorio do plano"
     meta = p["meta"] || %{}
     gasto = (m && m["gasto"]) || 0
     r = (m && m["resultados"]) || 0
@@ -154,7 +154,7 @@ defmodule Trafego.Monitor do
     pendente =
       case Proposta.aberta(tenant, "pausar", p["id"]) do
         nil -> ""
-        q -> " Proposta #{q["id"]} (pausar) aguardando sua confirmacao."
+        _ -> " Falta sua confirmação pra pausar."
       end
 
     "#{titulo}: gastou #{Plano.brl(gasto)} de #{Plano.brl(p["teto_total"])}; #{r} resultados (meta #{meta["resultados"]}), #{cpr} (maximo #{Plano.brl(meta["custo_max"])}). Situacao: #{situacao(estado)}.#{pendente}"
