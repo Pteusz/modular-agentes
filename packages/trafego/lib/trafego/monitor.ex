@@ -40,7 +40,9 @@ defmodule Trafego.Monitor do
   @doc "Avalia os planos ATIVOS do tenant. `agora:` (DateTime) so para teste."
   def rodar(tenant, opts \\ []) do
     agora = opts[:agora] || DateTime.utc_now()
-    for %{"status" => "ativa"} = p <- Plano.listar(tenant), do: {p["id"], tratar(tenant, p, agora)}
+    resultado = for %{"status" => "ativa"} = p <- Plano.listar(tenant), do: {p["id"], tratar(tenant, p, agora)}
+    Trafego.Saldo.avisar(tenant)
+    resultado
   end
 
   defp tratar(tenant, p, agora) do

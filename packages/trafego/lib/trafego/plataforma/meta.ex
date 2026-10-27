@@ -83,6 +83,23 @@ defmodule Trafego.Plataforma.Meta do
     end
   end
 
+  # saldo (6.3): so leitura. Em conta pre-paga o `balance` da Meta e valor DEVIDO (vem 0); o saldo disponivel so aparece no texto de
+  # exibicao de funding_source_details ("Saldo disponivel (R$6,99 BRL)"), que o Saldo.parse_centavos/1 le.
+  @impl true
+  def ler_saldo(cred) do
+    with {:ok, r} <- get(cred, conta_id(cred["conta_id"]), [fields: "is_prepay_account,funding_source_details,currency"], leitura()), do: saldo_da_resposta(r)
+  end
+
+  @doc false
+  def saldo_da_resposta(%{"is_prepay_account" => true} = r) do
+    brl? = r["currency"] in [nil, "BRL"]
+    saldo = if brl?, do: Trafego.Saldo.parse_centavos(get_in(r, ["funding_source_details", "display_string"]))
+    {:ok, %{"tipo" => "pre_pago", "saldo" => saldo}}
+  end
+
+  def saldo_da_resposta(%{"is_prepay_account" => false}), do: {:ok, %{"tipo" => "pos_pago", "saldo" => nil}}
+  def saldo_da_resposta(_), do: {:error, :resposta_inesperada}
+
   @campos_insights "campaign_id,spend,reach,clicks,actions"
   @max_paginas 10
 

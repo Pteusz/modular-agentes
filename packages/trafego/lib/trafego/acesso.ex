@@ -9,7 +9,7 @@ defmodule Trafego.Acesso do
   require Logger
   alias Trafego.{Cache, Cifra, Evento, Plataforma}
 
-  @ops ~w(criar_campanha ler_campanha editar_campanha pausar_campanha ativar_campanha listar_campanhas listar_campanhas_com_metricas metricas numeros_vinculados)a
+  @ops ~w(criar_campanha ler_campanha editar_campanha pausar_campanha ativar_campanha listar_campanhas listar_campanhas_com_metricas metricas numeros_vinculados ler_saldo)a
   # escrevem na plataforma: o cache do painel do tenant e esquecido depois (qualquer que seja o resultado: uma falha parcial tambem muda a conta)
   @escritas ~w(criar_campanha editar_campanha pausar_campanha ativar_campanha)a
   @campos ~w(conta_id pagina_id instagram_id pixel_id)

@@ -355,6 +355,6 @@ defmodule Etapa61Test do
   end
 
   test "versao do pacote" do
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.15.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.16.0"
   end
 end

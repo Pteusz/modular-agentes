@@ -408,6 +408,7 @@ defmodule Trafego.Conversa do
   end
 
   defp texto_base(%{"saldo_e_teto" => %{"teto_de_ia_do_mes" => t, "gasto_de_ia_no_mes" => g}}), do: "Teto de IA do mes: #{t} (gasto #{g})."
+  defp texto_base(%{"saldo_meta" => %{"resumo" => r}}), do: r
   defp texto_base(_), do: ""
 
   # ---- estado (resumo para o modelo; nunca lista de campos)
