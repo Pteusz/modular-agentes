@@ -3,7 +3,7 @@ defmodule Trafego.Plataforma.Simulada do
   @behaviour Trafego.Plataforma
   use Agent
 
-  def start_link(_ \\ []), do: Agent.start_link(fn -> %{contas: MapSet.new(), tokens: %{}, campanhas: %{}, seq: 0, numeros: %{}, cegas: MapSet.new(), chamadas: %{}, latencia: 0, falhas: %{}} end, name: __MODULE__)
+  def start_link(_ \\ []), do: Agent.start_link(fn -> %{contas: MapSet.new(), tokens: %{}, campanhas: %{}, seq: 0, numeros: %{}, cegas: MapSet.new(), chamadas: %{}, latencia: 0, falhas: %{}, saldos: %{}} end, name: __MODULE__)
 
   # ---- ajuda de teste (lado da "plataforma")
   def registrar_conta(id), do: Agent.update(__MODULE__, fn s -> %{s | contas: MapSet.put(s.contas, id)} end)
@@ -11,6 +11,9 @@ defmodule Trafego.Plataforma.Simulada do
   @doc "Numeros de WhatsApp vinculados a conta (a Meta so cria o conjunto com um deles). `cega: true`: a leitura dos numeros falha (token sem permissao)."
   def registrar_numeros(conta, lista, opts \\ []),
     do: Agent.update(__MODULE__, fn s -> %{s | numeros: Map.put(s.numeros, conta, lista), cegas: if(opts[:cega], do: MapSet.put(s.cegas, conta), else: MapSet.delete(s.cegas, conta))} end)
+
+  @doc "Saldo que a plataforma devolveria para a conta (mapa do contrato `ler_saldo`). Sem registro: {:error, :indisponivel}."
+  def registrar_saldo(conta, mapa), do: Agent.update(__MODULE__, fn s -> %{s | saldos: Map.put(s.saldos, conta, mapa)} end)
 
   @doc "Medicao: chamadas recebidas por operacao do contrato (%{op => n}); cada funcao do contrato conta uma."
   def chamadas, do: Agent.get(__MODULE__, & &1.chamadas)
@@ -40,6 +43,19 @@ defmodule Trafego.Plataforma.Simulada do
   def validar_credencial(cred) do
     with :ok <- passo(:validar_credencial),
          do: Agent.get(__MODULE__, &if(autoriza?(&1, cred), do: {:ok, %{"conta_id" => cred["conta_id"]}}, else: {:error, :credencial_invalida}))
+  end
+
+  @impl true
+  def ler_saldo(cred) do
+    with :ok <- passo(:ler_saldo) do
+      Agent.get(__MODULE__, fn s ->
+        cond do
+          not autoriza?(s, cred) -> {:error, :credencial_invalida}
+          m = s.saldos[cred["conta_id"]] -> {:ok, m}
+          true -> {:error, :indisponivel}
+        end
+      end)
+    end
   end
 
   @impl true

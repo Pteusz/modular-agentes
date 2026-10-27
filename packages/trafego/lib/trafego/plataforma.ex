@@ -20,6 +20,11 @@ defmodule Trafego.Plataforma do
   Campanha SEM a chave "metricas" = o lote de metricas falhou; o chamador busca uma a uma (caminho antigo). Erro de credencial volta como erro.
   """
   @callback listar_campanhas_com_metricas(cred, dias :: pos_integer()) :: {:ok, [map]} | {:error, term}
+  @doc """
+  Saldo da conta de anuncios (leitura, 6.3): %{"tipo" => "pre_pago" | "pos_pago", "saldo" => centavos | nil}. `saldo` so existe em
+  conta pre-paga e e nil quando a plataforma nao deixa ler o numero.
+  """
+  @callback ler_saldo(cred) :: {:ok, map} | {:error, term}
   @optional_callbacks numeros_vinculados: 1, listar_campanhas_com_metricas: 2
   @doc "Metricas dos ultimos `dias` dias de UMA campanha da conta: gasto (centavos), alcance, cliques, mensagens_iniciadas, resultados."
   @callback metricas(cred, id :: String.t(), dias :: pos_integer()) :: {:ok, map} | {:error, term}
