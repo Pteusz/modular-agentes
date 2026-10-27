@@ -143,3 +143,9 @@ Teste geral passando, mix test das etapas anteriores passando, docs/estado.md e 
 - B: nome da campanha nova = "<Imovel> · <destino>" (WhatsApp, Site, Formulário) por Plano.nome_campanha; imovel limpo como dado (sem controle, espacos colapsados, ate 60 caracteres, corte em palavra); sem imovel "Campanha · <destino> <id do plano>". Campanhas existentes nao sao renomeadas.
 - C: ferramenta de acao propor_ajuste (ref, verba_diaria e/ou teto_total em reais). So abre a Proposta (tipo ajustar, mostra antes → depois); executa depois do sim pelo Gancho/Ativacao: rele a campanha (ativa ou pausada), revalida (teto > verba), edita so os campos pedidos, le de volta e confere, atualiza o plano ligado sem mudar o status e registra o Evento. Valor exatamente o dito pelo corretor; uma acao por mensagem.
 - Nao testado contra a Meta real (so a Simulada): daily_budget/spend_cap em campanha ATIVA e o caractere "·" no nome.
+
+6.2 Tipo de campanha antes de tudo (trafego 1.15.0)
+- STATUS: branch etapa-6-2-tipo; teste test/etapa62_test.exs. AGUARDA APROVACAO (sem push, merge, tag nem deploy).
+- O destino virou item do nucleo da ficha: sem ele a Iara pergunta SO o tipo (formulario, WhatsApp ou site), em uma frase, antes da lista "Pra montar o plano me conta:". O que o corretor ja disse (imovel, verba, teto) fica guardado no rascunho; a lista seguinte so pergunta o que falta, inclusive o que o destino exige (numero, link e pixel, id do formulario).
+- Fim do destino assumido: Ficha nao decide mais site/whatsapp sozinha. Pergunta feita uma vez; resposta ambigua ("tanto faz") reexplica a diferenca numa frase e pergunta de novo, sem sugerir. Destino dito antes nao e perguntado. Regras de cada destino inalteradas.
+- Testes antigos: plano montado sem destino passaram a dizer destino whatsapp (etapas 5.2.1 e 5.2.3); versoes 1.15.0.

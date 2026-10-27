@@ -195,7 +195,7 @@ defmodule Etapa523Test do
     Application.put_env(:trafego, :numero_cadastrado, fn _ -> nil end)
     t = tenant_pronto()
     dizer(t, "quero anunciar")
-    assert junto(dizer(t, "pedido objetivo vender")) =~ ~r/audio/i
+    assert junto(dizer(t, "pedido objetivo vender; destino whatsapp")) =~ ~r/audio/i
   end
 
   test "regra de uso: audio -> falas conversacionais curtas em voz; dados para conferir continuam em texto" do
@@ -373,7 +373,7 @@ defmodule Etapa523Test do
 
   test "versoes: nucleo 1.7.0 (canal com enviar_audio opcional) e trafego 1.12.0" do
     assert to_string(Application.spec(:nucleo, :vsn)) == "1.7.0"
-    assert to_string(Application.spec(:trafego, :vsn)) == "1.14.0"
+    assert to_string(Application.spec(:trafego, :vsn)) == "1.15.0"
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:optional_callbacks)
     assert {:enviar_audio, 3} in Nucleo.Canal.behaviour_info(:callbacks)
     Code.ensure_loaded!(Nucleo.Canal.Simulado)
